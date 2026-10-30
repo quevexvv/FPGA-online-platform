@@ -1,0 +1,35 @@
+# Same operator-verified LED mapping as led_check.qsf.
+set_global_assignment -name FAMILY "Cyclone V"
+set_global_assignment -name DEVICE 5CGXFC5C6F27C7
+set_global_assignment -name TOP_LEVEL_ENTITY clock_board
+set_global_assignment -name VERILOG_FILE ../hdl/clock_board.v
+set_global_assignment -name VERILOG_FILE ../hdl/clock_burst.v
+set_global_assignment -name SDC_FILE clock_board.sdc
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY ../build/clock_board
+set_global_assignment -name NUM_PARALLEL_PROCESSORS 2
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS "AS INPUT TRI-STATED"
+set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to generator|dut_clk
+set_location_assignment PIN_R20 -to clk
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to clk
+set_instance_assignment -name IO_STANDARD "2.5 V" -to led[*]
+set_location_assignment PIN_F7 -to led[0]
+set_location_assignment PIN_F6 -to led[1]
+set_location_assignment PIN_G6 -to led[2]
+set_location_assignment PIN_G7 -to led[3]
+set_location_assignment PIN_J8 -to led[4]
+set_location_assignment PIN_J7 -to led[5]
+set_location_assignment PIN_K10 -to led[6]
+set_location_assignment PIN_K8 -to led[7]
+set_location_assignment PIN_H7 -to led[8]
+set_location_assignment PIN_J10 -to led[9]
+set_location_assignment PIN_L7 -to led[10]
+set_location_assignment PIN_K6 -to led[11]
+set_location_assignment PIN_D8 -to led[12]
+set_location_assignment PIN_E9 -to led[13]
+set_location_assignment PIN_A5 -to led[14]
+set_location_assignment PIN_B6 -to led[15]
+set_location_assignment PIN_H8 -to led[16]
+set_location_assignment PIN_H9 -to led[17]
+
+set_global_assignment -name LAST_QUARTUS_VERSION "23.1std.0 Lite Edition"
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS_NO_OUTPUT_GND "AS INPUT TRI-STATED"

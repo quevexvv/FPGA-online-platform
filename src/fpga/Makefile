@@ -49,7 +49,7 @@ test-contract:
 	@bash tests/contract.sh
 
 .PHONY: test-clock test-hdl
-test-hdl: test-simulator test-led test-clock
+test-hdl: test-simulator test-led test-clock test-clock-board
 
 test-clock:
 	@mkdir -p build
@@ -57,3 +57,9 @@ test-clock:
 	$(VVP) build/tb_clock_burst
 	$(IVERILOG) -g2001 -Wall -s tb_clock_burst -Ptb_clock_burst.HALF_PERIOD=25 -o build/tb_clock_burst_25 tests/tb_clock_burst.v hdl/clock_burst.v
 	$(VVP) build/tb_clock_burst_25
+
+.PHONY: test-clock-board
+test-clock-board:
+	@mkdir -p build
+	$(IVERILOG) -g2001 -Wall -s tb_clock_board -o build/tb_clock_board tests/tb_clock_board.v hdl/clock_board.v hdl/clock_burst.v
+	$(VVP) build/tb_clock_board

@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 // Experimental registered slow clock, independent of ALTCLKCTRL.
-module clock_burst #(parameter HALF_PERIOD = 25, RESET_PULSES = 2) (
+module clock_burst #(parameter HALF_PERIOD = 25, parameter [15:0] RESET_PULSES = 16'd2) (
     input wire clk,
     input wire start,
     input wire reset_command,
