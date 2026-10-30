@@ -32,3 +32,13 @@ test-led:
 	@mkdir -p build
 	$(IVERILOG) -g2001 -Wall -s tb_led_check -o build/tb_led_check tests/tb_led_check.v hdl/led_check.v
 	$(VVP) build/tb_led_check
+
+.PHONY: test-simulator probe-vendor
+test-simulator:
+	IVERILOG="$(IVERILOG)" VVP="$(VVP)" bash tests/simulator.sh
+
+probe-vendor:
+	@test -n "$(QUARTUS_ROOTDIR)" || { echo 'Set QUARTUS_ROOTDIR' >&2; exit 2; }
+	@mkdir -p build
+	$(IVERILOG) -g2001 -Wall -s tb_vendor_clock -o build/vendor-clock tests/tb_vendor_clock.v "$(QUARTUS_ROOTDIR)/eda/sim_lib/cyclonev_atoms.v"
+	$(VVP) build/vendor-clock
