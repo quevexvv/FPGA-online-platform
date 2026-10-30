@@ -6,6 +6,8 @@ SHELLCHECK ?= shellcheck
 
 SHELL_FILES := bin/fpga-dispatch bin/fpga-run $(wildcard scripts/*.sh tests/*.sh)
 C_FILES := $(wildcard src/uart/*.c tests/*.c)
+IVERILOG ?= iverilog
+VVP ?= vvp
 
 .PHONY: all test lint syntax
 all: syntax
@@ -19,8 +21,51 @@ syntax:
 test: all
 	@bash tests/scaffold.sh
 	@bash tests/pipeline-placeholder.sh
+	@bash tests/contract.sh
+	@$(MAKE) --no-print-directory test-protocol
 
 lint: syntax
 	@"$(SHELLCHECK)" $(SHELL_FILES)
 	@for file in $(C_FILES); do $(CC) $(CPPFLAGS) $(CFLAGS) -fsyntax-only "$$file" || exit; done
 	@echo 'Lint пройден; проверка C применится после появления исходников.'
+
+.PHONY: test-led
+test-led:
+	@mkdir -p build
+	$(IVERILOG) -g2001 -Wall -s tb_led_check -o build/tb_led_check tests/tb_led_check.v hdl/led_check.v
+	$(VVP) build/tb_led_check
+
+.PHONY: test-simulator probe-vendor
+test-simulator:
+	IVERILOG="$(IVERILOG)" VVP="$(VVP)" bash tests/simulator.sh
+
+probe-vendor:
+	@test -n "$(QUARTUS_ROOTDIR)" || { echo 'Set QUARTUS_ROOTDIR' >&2; exit 2; }
+	@mkdir -p build
+	$(IVERILOG) -g2001 -Wall -s tb_vendor_clock -o build/vendor-clock tests/tb_vendor_clock.v "$(QUARTUS_ROOTDIR)/eda/sim_lib/cyclonev_atoms.v"
+	$(VVP) build/vendor-clock
+
+.PHONY: test-contract
+test-contract:
+	@bash tests/contract.sh
+
+.PHONY: test-clock test-hdl
+test-hdl: test-simulator test-led test-clock test-clock-board
+
+test-clock:
+	@mkdir -p build
+	$(IVERILOG) -g2001 -Wall -s tb_clock_burst -o build/tb_clock_burst tests/tb_clock_burst.v hdl/clock_burst.v
+	$(VVP) build/tb_clock_burst
+	$(IVERILOG) -g2001 -Wall -s tb_clock_burst -Ptb_clock_burst.HALF_PERIOD=25 -o build/tb_clock_burst_25 tests/tb_clock_burst.v hdl/clock_burst.v
+	$(VVP) build/tb_clock_burst_25
+
+.PHONY: test-clock-board
+test-clock-board:
+	@mkdir -p build
+	$(IVERILOG) -g2001 -Wall -s tb_clock_board -o build/tb_clock_board tests/tb_clock_board.v hdl/clock_board.v hdl/clock_burst.v
+	$(VVP) build/tb_clock_board
+
+.PHONY: test-protocol
+test-protocol:
+	@jq -e -f tests/protocol.jq examples/uart-frames.json >/dev/null
+	@echo 'PASS: UART protocol frame table'
