@@ -6,6 +6,8 @@ SHELLCHECK ?= shellcheck
 
 SHELL_FILES := bin/fpga-dispatch bin/fpga-run $(wildcard scripts/*.sh tests/*.sh)
 C_FILES := $(wildcard src/uart/*.c tests/*.c)
+IVERILOG ?= iverilog
+VVP ?= vvp
 
 .PHONY: all test lint syntax
 all: syntax
@@ -24,3 +26,9 @@ lint: syntax
 	@"$(SHELLCHECK)" $(SHELL_FILES)
 	@for file in $(C_FILES); do $(CC) $(CPPFLAGS) $(CFLAGS) -fsyntax-only "$$file" || exit; done
 	@echo 'Lint пройден; проверка C применится после появления исходников.'
+
+.PHONY: test-led
+test-led:
+	@mkdir -p build
+	$(IVERILOG) -g2001 -Wall -s tb_led_check -o build/tb_led_check tests/tb_led_check.v hdl/led_check.v
+	$(VVP) build/tb_led_check
