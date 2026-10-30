@@ -47,3 +47,13 @@ probe-vendor:
 .PHONY: test-contract
 test-contract:
 	@bash tests/contract.sh
+
+.PHONY: test-clock test-hdl
+test-hdl: test-simulator test-led test-clock
+
+test-clock:
+	@mkdir -p build
+	$(IVERILOG) -g2001 -Wall -s tb_clock_burst -o build/tb_clock_burst tests/tb_clock_burst.v hdl/clock_burst.v
+	$(VVP) build/tb_clock_burst
+	$(IVERILOG) -g2001 -Wall -s tb_clock_burst -Ptb_clock_burst.HALF_PERIOD=25 -o build/tb_clock_burst_25 tests/tb_clock_burst.v hdl/clock_burst.v
+	$(VVP) build/tb_clock_burst_25

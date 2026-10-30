@@ -16,7 +16,8 @@ jobs:
         with:
           persist-credentials: false
       - name: Install host check tools
-        run: sudo apt-get update && sudo apt-get install -y build-essential jq shellcheck
+        run: sudo apt-get update && sudo apt-get install -y build-essential jq shellcheck iverilog
       - run: make all
       - run: make test
       - run: make lint
+      - run: make test-hdl
