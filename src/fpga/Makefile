@@ -21,6 +21,7 @@ syntax:
 test: all
 	@bash tests/scaffold.sh
 	@bash tests/pipeline-placeholder.sh
+	@bash tests/contract.sh
 
 lint: syntax
 	@"$(SHELLCHECK)" $(SHELL_FILES)
@@ -42,3 +43,7 @@ probe-vendor:
 	@mkdir -p build
 	$(IVERILOG) -g2001 -Wall -s tb_vendor_clock -o build/vendor-clock tests/tb_vendor_clock.v "$(QUARTUS_ROOTDIR)/eda/sim_lib/cyclonev_atoms.v"
 	$(VVP) build/vendor-clock
+
+.PHONY: test-contract
+test-contract:
+	@bash tests/contract.sh
