@@ -22,6 +22,7 @@ test: all
 	@bash tests/scaffold.sh
 	@bash tests/pipeline-placeholder.sh
 	@bash tests/contract.sh
+	@$(MAKE) --no-print-directory test-protocol
 
 lint: syntax
 	@"$(SHELLCHECK)" $(SHELL_FILES)
@@ -63,3 +64,8 @@ test-clock-board:
 	@mkdir -p build
 	$(IVERILOG) -g2001 -Wall -s tb_clock_board -o build/tb_clock_board tests/tb_clock_board.v hdl/clock_board.v hdl/clock_burst.v
 	$(VVP) build/tb_clock_board
+
+.PHONY: test-protocol
+test-protocol:
+	@jq -e -f tests/protocol.jq examples/uart-frames.json >/dev/null
+	@echo 'PASS: UART protocol frame table'
