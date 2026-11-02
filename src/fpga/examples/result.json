@@ -1,0 +1,8 @@
+{
+  "schema_version":1,"run_id":"7dd3f420-5916-4d71-908e-b7885c071853",
+  "mode":"hardware","status":"passed","hardware_verified":true,
+  "started_at":"2026-10-30T10:00:01Z","finished_at":"2026-10-30T10:04:00Z",
+  "summary":{"planned":1,"executed":1,"passed":1,"failed":0},
+  "observations":[{"vector_index":0,"din":"0x001","steps":3,"dout":"0x00003","expected_dout":"0x00003","mask":"0x3ffff","match":true}],
+  "error":null,"logs":["logs/build.log","logs/program.log","logs/test.log"]
+}

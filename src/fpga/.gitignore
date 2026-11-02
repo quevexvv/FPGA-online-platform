@@ -1,0 +1,11 @@
+# Генерируемые файлы интеграции с ПЛИС
+/build/
+/incoming/
+/runs/
+/quartus/db/
+/quartus/incremental_db/
+/quartus/output_files/
+/quartus/c5_pin_model_dump.txt
+/config/*.local.json
+.env.*
+!.env.example

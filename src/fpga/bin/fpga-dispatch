@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -eq 1 && $1 == --help ]]; then
+    cat <<'HELP'
+Usage: fpga-dispatch --help
+Планируемый интерфейс:
+  fpga-dispatch submit --run-id <uuid> --mode hardware|mock
+  fpga-dispatch status --run-id <uuid>
+  fpga-dispatch cleanup --run-id <uuid>
+
+Каркас: команды ещё не реализованы; задания не запускаются.
+HELP
+    exit 0
+fi
+
+printf '%s\n' 'fpga-dispatch: команды ещё не реализованы; см. --help.' >&2
+exit 2
