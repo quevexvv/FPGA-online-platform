@@ -14,7 +14,8 @@ const useStyles = makeStyles({
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
-    minHeight: '100vh',
+    width: '100vw',
+    height: '100vh',
     backgroundColor: tokens.colorNeutralBackground2,
   },
   card: {
@@ -41,12 +42,12 @@ const useStyles = makeStyles({
   },
 });
 
-export const AuthPage: React.FC = () => {
-  const styles = useStyles();
+interface AuthPageProps {
+  onLogin: () => void;
+}
 
-  const handleTpuLogin = () => {
-    console.log('Перенаправление на SSO ТПУ...');
-  };
+export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
+  const styles = useStyles();
 
   return (
     <main className={styles.pageLayout}>
@@ -63,7 +64,7 @@ export const AuthPage: React.FC = () => {
           icon={<Shield24Regular />}
           size="large"
           className={styles.tpuButton}
-          onClick={handleTpuLogin}
+          onClick={onLogin}
         >
           Войти с помощью TPU ID
         </Button>
