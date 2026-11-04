@@ -1,24 +1,36 @@
-import { webLightTheme, webDarkTheme, Theme } from '@fluentui/react-components';
-import { lightPalette, darkPalette } from './colors';
+import { createDarkTheme, createLightTheme, Theme } from '@fluentui/react-components';
+import { darkPalette, greenBrand, lightPalette } from './colors';
+
+type Palette = typeof lightPalette;
+
+// Общие настройки для обеих тем: подставляем цвета из дизайна в Figma в токены Fluent
+const paletteTokens = (palette: Palette): Partial<Theme> => ({
+  colorNeutralBackground1: palette.bgPanel,
+  colorNeutralBackground2: palette.bgWindow,
+  colorNeutralBackground3: palette.badgeNeutral,
+  colorNeutralForeground1: palette.textMain,
+  colorNeutralForeground2: palette.textSecondary,
+  colorNeutralForeground3: palette.textAccent,
+  colorNeutralForegroundDisabled: palette.textDisabled,
+  colorNeutralStroke1: palette.strokeStrong,
+  colorNeutralStroke2: palette.stroke,
+  colorNeutralStroke3: palette.strokeSubtle,
+  colorBrandBackground: palette.primaryGreen,
+  colorBrandBackgroundHover: palette.primaryGreenHover,
+  colorBrandBackgroundPressed: palette.primaryGreenPressed,
+  colorBrandForeground1: palette.primaryGreen,
+  colorStatusSuccessForeground1: palette.primaryGreen,
+  colorStatusSuccessBackground1: palette.successBackground,
+  colorStatusWarningForeground1: palette.warning,
+  colorStatusWarningBackground1: palette.warningBackground,
+});
 
 export const customLightTheme: Theme = {
-  ...webLightTheme,
-  colorNeutralBackground1: lightPalette.bgPanel,
-  colorNeutralBackground2: lightPalette.bgWindow,
-  colorNeutralForeground1: lightPalette.textMain,
-  colorNeutralForeground2: lightPalette.textMuted,
-  colorBrandBackground: lightPalette.primaryGreen,
-  colorBrandBackgroundHover: lightPalette.primaryGreenHover,
-  colorBrandBackgroundPressed: lightPalette.primaryGreenPressed,
+  ...createLightTheme(greenBrand),
+  ...paletteTokens(lightPalette),
 };
 
 export const customDarkTheme: Theme = {
-  ...webDarkTheme,
-  colorNeutralBackground1: darkPalette.bgPanel,
-  colorNeutralBackground2: darkPalette.bgWindow,
-  colorNeutralForeground1: darkPalette.textMain,
-  colorNeutralForeground2: darkPalette.textMuted,
-  colorBrandBackground: darkPalette.primaryGreen,
-  colorBrandBackgroundHover: darkPalette.primaryGreenHover,
-  colorBrandBackgroundPressed: darkPalette.primaryGreenPressed,
+  ...createDarkTheme(greenBrand),
+  ...paletteTokens(darkPalette),
 };
