@@ -22,8 +22,9 @@ const useStyles = makeStyles({
   navContainer: {
     display: 'flex',
     gap: '40px',
-
-    marginLeft: '24px',
+    marginLeft: '72px',
+    // auto забирает всё свободное место и отодвигает кнопку темы к правому краю
+    marginRight: 'auto',
   },
   navButton: {
     background: 'none',
@@ -37,7 +38,7 @@ const useStyles = makeStyles({
   },
   navButtonActive: {
     fontWeight: '700',
-    color: tokens.colorBrandBackground,
+    color: tokens.colorBrandForeground1,
   },
   navButtonInactive: {
     color: tokens.colorNeutralForeground2,
@@ -78,7 +79,8 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className={styles.header}>
       <div className={styles.userText}>Иванов Иван (8К51Т)</div>
-
+      
+      {/* Навигация сразу после имени */}
       <nav className={styles.navContainer}>
         {navItems.map((item) => {
           const isActive = currentTab === item.id;

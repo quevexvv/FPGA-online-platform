@@ -37,7 +37,7 @@ const useStyles = makeStyles({
     display: 'grid',
     gridTemplateColumns: '2fr 2fr 1.5fr 1fr 1fr',
     padding: '12px 32px',
-    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderBottom: `1px solid ${tokens.colorNeutralStroke1}`,
     fontSize: '12px',
     fontWeight: '600',
     color: tokens.colorNeutralForeground2,
@@ -80,8 +80,8 @@ const useStyles = makeStyles({
     borderRadius: '12px',
     fontSize: '12px',
     fontWeight: '700',
-    backgroundColor: 'rgba(0, 140, 58, 0.15)',
-    color: tokens.colorBrandBackground,
+    backgroundColor: tokens.colorStatusSuccessBackground1,
+    color: tokens.colorStatusSuccessForeground1,
     width: 'fit-content',
   },
   badgeInProgress: {
@@ -91,8 +91,8 @@ const useStyles = makeStyles({
     borderRadius: '12px',
     fontSize: '12px',
     fontWeight: '700',
-    backgroundColor: 'rgba(217, 119, 6, 0.15)',
-    color: '#D97706',
+    backgroundColor: tokens.colorStatusWarningBackground1,
+    color: tokens.colorStatusWarningForeground1,
     width: 'fit-content',
   },
   badgeNotStarted: {
@@ -102,29 +102,38 @@ const useStyles = makeStyles({
     borderRadius: '12px',
     fontSize: '12px',
     fontWeight: '700',
-    backgroundColor: tokens.colorNeutralStroke3,
-    color: tokens.colorNeutralForeground2,
+    backgroundColor: tokens.colorNeutralBackground3,
+    color: tokens.colorNeutralForeground3,
     width: 'fit-content',
   },
   actionButton: {
-  background: 'none',
-  border: 'none',
-  padding: 0,
-  fontFamily: 'inherit',
-  fontSize: '14px',
-  fontWeight: '600',
-  cursor: 'pointer',
-},
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    fontFamily: 'inherit',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+  },
   actionGreen: {
-    color: tokens.colorBrandBackground,
-},
+    color: tokens.colorBrandForeground1,
+  },
   actionOrange: {
-    color: '#D97706',
-},
+    color: tokens.colorStatusWarningForeground1,
+  },
   actionBlocked: {
     fontSize: '14px',
     fontWeight: '600',
-    color: tokens.colorNeutralForeground2,
+    color: tokens.colorNeutralForegroundDisabled,
+  },
+  // Срок сдачи: выделяем только сегодняшний и уже сданный
+  deadlineToday: {
+    fontWeight: '600',
+    color: tokens.colorStatusWarningForeground1,
+  },
+  deadlineCompleted: {
+    fontWeight: '600',
+    color: tokens.colorStatusSuccessForeground1,
   },
 });
 
@@ -149,10 +158,10 @@ export const LabsPage: React.FC<LabsPageProps> = ({ onOpenTask, onOpenCode }) =>
 
   const renderDeadline = (lab: LabItem) => {
     if (lab.deadlineType === 'today') {
-      return <span style={{ color: '#D97706', fontWeight: 600 }}>{lab.deadline}</span>;
+      return <span className={styles.deadlineToday}>{lab.deadline}</span>;
     }
     if (lab.deadlineType === 'completed') {
-      return <span style={{ color: tokens.colorBrandBackground, fontWeight: 600 }}>{lab.deadline}</span>;
+      return <span className={styles.deadlineCompleted}>{lab.deadline}</span>;
     }
     return <span>{lab.deadline}</span>;
   };

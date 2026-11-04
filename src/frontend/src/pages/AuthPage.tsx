@@ -28,18 +28,6 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '20px',
   },
-  tpuButton: {
-    backgroundColor: tokens.colorBrandBackground,
-    color: '#FFFFFF',
-    ':hover': {
-      backgroundColor: tokens.colorBrandBackgroundHover,
-      color: '#FFFFFF',
-    },
-    ':hover:active': {
-      backgroundColor: tokens.colorBrandBackgroundPressed,
-      color: '#FFFFFF',
-    },
-  },
 });
 
 interface AuthPageProps {
@@ -62,8 +50,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
         
         <Button
           icon={<Shield24Regular />}
+          appearance="primary"
           size="large"
-          className={styles.tpuButton}
           onClick={onLogin}
         >
           Войти с помощью TPU ID
