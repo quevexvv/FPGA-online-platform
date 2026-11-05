@@ -22,14 +22,14 @@ reg [3:0] remaining = 0;
 function [4:0] unhex;
     input [7:0] c;
     begin
-        if (c >= "0" && c <= "9") unhex = c - "0";
-        else if (c >= "a" && c <= "f") unhex = c - "a" + 10;
+        if (c >= "0" && c <= "9") unhex = {1'b0, c[3:0]};
+        else if (c >= "a" && c <= "f") unhex = {1'b0, c[3:0]} + 5'd9;
         else unhex = 5'h10;
     end
 endfunction
 function [7:0] hexchar;
     input [3:0] v;
-    begin hexchar = v < 10 ? "0" + v : "a" + v - 10; end
+    begin hexchar = v < 10 ? 8'h30 + {4'd0, v} : 8'h61 + {4'd0, v} - 8'd10; end
 endfunction
 function [63:0] response;
     input [7:0] kind;
