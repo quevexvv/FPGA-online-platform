@@ -17,6 +17,7 @@ from app.core.config import Settings, get_settings
 from app.db.session import create_database_engine, create_session_factory, get_db
 from app.modules.auth.router import router as auth_router
 from app.modules.labs.router import router as labs_router
+from app.modules.submissions.router import router as submissions_router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -40,6 +41,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.settings = settings
     application.include_router(auth_router)
     application.include_router(labs_router)
+    application.include_router(submissions_router)
 
     @application.exception_handler(RequestValidationError)
     async def validation_error(request, exc):
@@ -50,9 +52,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse(status_code=422, content={"detail": errors})
 
     @application.middleware("http")
-    async def protect_auth_responses(request, call_next):
+    async def protect_private_responses(request, call_next):
         response = await call_next(request)
-        if request.url.path.startswith("/auth/"):
+        if request.url.path.startswith(("/auth/", "/submissions/")) or (
+            request.url.path.startswith("/labs/")
+            and request.url.path.rstrip("/").endswith("/submissions")
+        ):
             response.headers["Cache-Control"] = "no-store"
         return response
 
