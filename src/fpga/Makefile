@@ -10,15 +10,16 @@ IVERILOG ?= iverilog
 VVP ?= vvp
 
 .PHONY: all test lint syntax
-all: syntax
+all: syntax build/test-serial
 	@test -x bin/fpga-dispatch && test -x bin/fpga-run
-	@echo 'Каркас готов; хостовая C-часть ещё не реализована.'
+	@echo 'Host checks built; dispatcher pipeline is not implemented.'
 
 syntax:
 	@for file in $(SHELL_FILES); do bash -n "$$file" || exit; done
 	@jq empty config/integration.example.json
 
 test: all
+	@$(MAKE) --no-print-directory test-serial
 	@bash tests/scaffold.sh
 	@bash tests/pipeline-placeholder.sh
 	@bash tests/contract.sh
@@ -27,7 +28,16 @@ test: all
 lint: syntax
 	@"$(SHELLCHECK)" $(SHELL_FILES)
 	@for file in $(C_FILES); do $(CC) $(CPPFLAGS) $(CFLAGS) -fsyntax-only "$$file" || exit; done
-	@echo 'Lint пройден; проверка C применится после появления исходников.'
+	@echo 'PASS: shell and C lint'
+
+build/test-serial: tests/serial.c src/uart/serial.c src/uart/serial.h
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/serial.c src/uart/serial.c -o $@
+
+.PHONY: test-serial
+test-serial: build/test-serial
+	./build/test-serial
+	@echo 'PASS: serial PTY transport'
 
 .PHONY: test-led
 test-led:
