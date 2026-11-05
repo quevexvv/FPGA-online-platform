@@ -77,7 +77,7 @@ test-contract:
 	@bash tests/contract.sh
 
 .PHONY: test-clock test-hdl
-test-hdl: test-simulator test-led test-clock test-clock-board
+test-hdl: test-simulator test-led test-clock test-clock-board test-uart-rx test-uart-tx
 
 test-clock:
 	@mkdir -p build
@@ -96,3 +96,19 @@ test-clock-board:
 test-protocol:
 	@jq -e -f tests/protocol.jq examples/uart-frames.json >/dev/null
 	@echo 'PASS: UART protocol frame table'
+
+.PHONY: test-uart-rx
+test-uart-rx:
+	@mkdir -p build
+	$(IVERILOG) -g2001 -Wall -s tb_uart_rx -o build/tb_uart_rx tests/tb_uart_rx.v hdl/uart_rx.v
+	$(VVP) build/tb_uart_rx
+	$(IVERILOG) -g2001 -Wall -s tb_uart_rx -Ptb_uart_rx.CLKS_PER_BIT=434 -o build/tb_uart_rx_434 tests/tb_uart_rx.v hdl/uart_rx.v
+	$(VVP) build/tb_uart_rx_434
+
+.PHONY: test-uart-tx
+test-uart-tx:
+	@mkdir -p build
+	$(IVERILOG) -g2001 -Wall -s tb_uart_tx -o build/tb_uart_tx tests/tb_uart_tx.v hdl/uart_tx.v
+	$(VVP) build/tb_uart_tx
+	$(IVERILOG) -g2001 -Wall -s tb_uart_tx -Ptb_uart_tx.CLKS_PER_BIT=434 -o build/tb_uart_tx_434 tests/tb_uart_tx.v hdl/uart_tx.v
+	$(VVP) build/tb_uart_tx_434
