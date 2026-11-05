@@ -24,6 +24,7 @@ test: all
 	@bash tests/scaffold.sh
 	@bash tests/pipeline-placeholder.sh
 	@bash tests/contract.sh
+	@bash tests/analyst-contract.sh
 	@$(MAKE) --no-print-directory test-protocol
 
 lint: syntax
