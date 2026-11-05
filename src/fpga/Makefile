@@ -10,7 +10,7 @@ IVERILOG ?= iverilog
 VVP ?= vvp
 
 .PHONY: all test lint syntax
-all: syntax build/test-serial
+all: syntax build/test-serial build/fpga-uart
 	@test -x bin/fpga-dispatch && test -x bin/fpga-run
 	@echo 'Host checks built; dispatcher pipeline is not implemented.'
 
@@ -20,6 +20,7 @@ syntax:
 
 test: all
 	@$(MAKE) --no-print-directory test-serial
+	@$(MAKE) --no-print-directory test-session
 	@bash tests/scaffold.sh
 	@bash tests/pipeline-placeholder.sh
 	@bash tests/contract.sh
@@ -38,6 +39,21 @@ build/test-serial: tests/serial.c src/uart/serial.c src/uart/serial.h
 test-serial: build/test-serial
 	./build/test-serial
 	@echo 'PASS: serial PTY transport'
+
+build/fpga-uart: src/uart/session.c src/uart/serial.c src/uart/serial.h
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) $(CFLAGS) src/uart/session.c src/uart/serial.c -o $@
+
+build/test-session: tests/session.c
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@
+
+.PHONY: test-session
+test-session: build/fpga-uart build/test-session
+	./build/test-session
+	@./build/fpga-uart --help >/dev/null
+	@for timeout in 0 60001 -1 text; do ./build/fpga-uart /dev/null "$$timeout" 2>/dev/null; test $$? -eq 2 || exit 1; done
+	@echo 'PASS: UART session PTY commands and failures'
 
 .PHONY: test-led
 test-led:
