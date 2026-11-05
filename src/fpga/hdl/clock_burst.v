@@ -2,6 +2,7 @@
 // Experimental registered slow clock, independent of ALTCLKCTRL.
 module clock_burst #(parameter HALF_PERIOD = 25, parameter [15:0] RESET_PULSES = 16'd2) (
     input wire clk,
+    input wire reset,
     input wire start,
     input wire reset_command,
     input wire [15:0] steps,
@@ -15,6 +16,10 @@ reg [31:0] divider = 0;
 reg draining = 0;
 always @(posedge clk) begin
     done <= 0;
+    if (reset) begin
+        dut_clk <= 0; dut_reset <= 0; busy <= 0;
+        remaining <= 0; divider <= 0; draining <= 0;
+    end else begin
     if (!busy) begin
         if (start) begin
             busy <= 1;
@@ -35,6 +40,7 @@ always @(posedge clk) begin
             remaining <= remaining - 1'b1;
             if (remaining == 1) draining <= 1;
         end
+    end
     end
 end
 endmodule

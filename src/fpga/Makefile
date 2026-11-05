@@ -77,7 +77,28 @@ test-contract:
 	@bash tests/contract.sh
 
 .PHONY: test-clock test-hdl
-test-hdl: test-simulator test-led test-clock test-clock-board test-uart-rx test-uart-tx
+test-hdl: test-simulator test-led test-clock test-clock-board test-uart-rx test-uart-tx test-uart-commands test-dut-control test-wrapper
+
+WRAPPER_HDL := hdl/fpga_wrapper.v hdl/dut_control.v hdl/clock_burst.v hdl/uart_service.v hdl/uart_commands.v hdl/uart_rx.v hdl/uart_tx.v
+.PHONY: test-wrapper
+test-wrapper:
+	@mkdir -p build
+	$(IVERILOG) -g2001 -Wall -s tb_fpga_wrapper -o build/tb_wrapper_counter tests/tb_fpga_wrapper.v $(WRAPPER_HDL) examples/counter/student_top.v
+	$(VVP) build/tb_wrapper_counter
+	$(IVERILOG) -g2001 -Wall -s tb_fpga_wrapper -Ptb_fpga_wrapper.COMBINATIONAL=1 -o build/tb_wrapper_combinational tests/tb_fpga_wrapper.v $(WRAPPER_HDL) examples/combinational/student_top.v
+	$(VVP) build/tb_wrapper_combinational
+
+.PHONY: test-dut-control
+test-dut-control:
+	@mkdir -p build
+	$(IVERILOG) -g2001 -Wall -s tb_dut_control -o build/tb_dut_control tests/tb_dut_control.v hdl/dut_control.v hdl/clock_burst.v
+	$(VVP) build/tb_dut_control
+
+.PHONY: test-uart-commands
+test-uart-commands:
+	@mkdir -p build
+	$(IVERILOG) -g2001 -Wall -s tb_uart_commands -o build/tb_uart_commands tests/tb_uart_commands.v hdl/uart_commands.v
+	$(VVP) build/tb_uart_commands
 
 test-clock:
 	@mkdir -p build
