@@ -77,7 +77,13 @@ test-contract:
 	@bash tests/contract.sh
 
 .PHONY: test-clock test-hdl
-test-hdl: test-simulator test-led test-clock test-clock-board test-uart-rx test-uart-tx test-uart-commands
+test-hdl: test-simulator test-led test-clock test-clock-board test-uart-rx test-uart-tx test-uart-commands test-dut-control
+
+.PHONY: test-dut-control
+test-dut-control:
+	@mkdir -p build
+	$(IVERILOG) -g2001 -Wall -s tb_dut_control -o build/tb_dut_control tests/tb_dut_control.v hdl/dut_control.v hdl/clock_burst.v
+	$(VVP) build/tb_dut_control
 
 .PHONY: test-uart-commands
 test-uart-commands:
