@@ -1,5 +1,15 @@
 import React from 'react';
-import { makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
+import {
+  makeStyles,
+  mergeClasses,
+  Table,
+  TableBody,
+  TableCell,
+  TableHeader,
+  TableHeaderCell,
+  TableRow,
+  tokens,
+} from '@fluentui/react-components';
 import { mockLabs } from '../mockLabs';
 import { LabItem } from '../types';
 
@@ -33,31 +43,42 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground1,
     margin: 0,
   },
-  tableHeader: {
-    display: 'grid',
-    gridTemplateColumns: '2fr 2fr 1.5fr 1fr 1fr',
-    padding: '12px 32px',
-    borderBottom: `1px solid ${tokens.colorNeutralStroke1}`,
+  // Прокручивается вся таблица вместе с заголовком, поэтому колонки всегда совпадают
+  tableScroll: {
+    flex: 1,
+    overflowY: 'auto',
+    padding: '0 32px',
+    scrollbarWidth: 'thin',
+    scrollbarColor: `${tokens.colorNeutralStroke1} transparent`,
+  },
+  table: {
+    // Уже этой ширины таблица не сжимается, а прокручивается по горизонтали
+    minWidth: '880px',
+  },
+  headerRow: {
+    // Линию под заголовком рисует headerCell, потому что граница строки уезжает при прокрутке
+    borderBottom: 'none',
+  },
+  headerCell: {
+    // Заголовок остаётся на месте, пока список прокручивается под ним
+    position: 'sticky',
+    top: 0,
+    zIndex: 1,
+    height: 'auto',
+    padding: '12px 16px 12px 0',
+    backgroundColor: tokens.colorNeutralBackground1,
+    boxShadow: `inset 0 -1px 0 ${tokens.colorNeutralStroke1}`,
     fontSize: '12px',
     fontWeight: '600',
     color: tokens.colorNeutralForeground2,
     letterSpacing: '0.5px',
-    flexShrink: 0,
-  },
-  tableScrollBody: {
-    flex: 1,
-    overflowY: 'auto',
-    padding: '0 32px',
-    // Кастомный скроллбар для надежности
-    scrollbarWidth: 'thin',
-    scrollbarColor: `${tokens.colorNeutralStroke1} transparent`,
   },
   row: {
-    display: 'grid',
-    gridTemplateColumns: '2fr 2fr 1.5fr 1fr 1fr',
-    padding: '20px 0',
-    alignItems: 'center',
     borderBottom: `1px solid ${tokens.colorNeutralStroke3}`,
+  },
+  cell: {
+    height: 'auto',
+    padding: '20px 16px 20px 0',
   },
   labTitle: {
     fontWeight: '700',
@@ -145,6 +166,15 @@ interface LabsPageProps {
 export const LabsPage: React.FC<LabsPageProps> = ({ onOpenTask, onOpenCode }) => {
   const styles = useStyles();
 
+  // Колонки таблицы: подпись и доля ширины (в сумме 100%)
+  const columns = [
+    { key: 'title', label: '№ / НАЗВАНИЕ', width: '27%' },
+    { key: 'description', label: 'ОПИСАНИЕ', width: '27%' },
+    { key: 'deadline', label: 'СРОК СДАЧИ', width: '20%' },
+    { key: 'status', label: 'СТАТУС', width: '13%' },
+    { key: 'action', label: 'ДЕЙСТВИЕ', width: '13%' },
+  ];
+
   const renderStatus = (status: LabItem['status']) => {
     switch (status) {
       case 'completed':
@@ -200,38 +230,49 @@ export const LabsPage: React.FC<LabsPageProps> = ({ onOpenTask, onOpenCode }) =>
           <h1 className={styles.title}>Список лабораторных работ</h1>
         </div>
 
-        {/* Шапка таблицы */}
-        <div className={styles.tableHeader}>
-          <div>№ / НАЗВАНИЕ</div>
-          <div>ОПИСАНИЕ</div>
-          <div>СРОК СДАЧИ</div>
-          <div>СТАТУС</div>
-          <div>ДЕЙСТВИЕ</div>
-        </div>
+        {/* Таблица: заголовок и строки в одном контейнере прокрутки */}
+        <div className={styles.tableScroll}>
+          <Table aria-label="Список лабораторных работ" className={styles.table}>
+            <TableHeader>
+              <TableRow className={styles.headerRow}>
+                {columns.map((column) => (
+                  <TableHeaderCell
+                    key={column.key}
+                    className={styles.headerCell}
+                    style={{ width: column.width }}
+                  >
+                    {column.label}
+                  </TableHeaderCell>
+                ))}
+              </TableRow>
+            </TableHeader>
 
-        {/* Прокручиваемое тело списка со скроллом */}
-        <div className={styles.tableScrollBody}>
-          {mockLabs.map((lab) => (
-            <div key={lab.id} className={styles.row}>
-              {/* Название */}
-              <div>
-                <div className={styles.labTitle}>{lab.title}</div>
-                <div className={styles.labSubtitle}>{lab.subtitle}</div>
-              </div>
+            <TableBody>
+              {mockLabs.map((lab) => (
+                <TableRow key={lab.id} className={styles.row}>
+                  {/* Название */}
+                  <TableCell className={styles.cell}>
+                    <div className={styles.labTitle}>{lab.title}</div>
+                    <div className={styles.labSubtitle}>{lab.subtitle}</div>
+                  </TableCell>
 
-              {/* Описание */}
-              <div className={styles.description}>{lab.description}</div>
+                  {/* Описание */}
+                  <TableCell className={mergeClasses(styles.cell, styles.description)}>
+                    {lab.description}
+                  </TableCell>
 
-              {/* Срок сдачи */}
-              <div>{renderDeadline(lab)}</div>
+                  {/* Срок сдачи */}
+                  <TableCell className={styles.cell}>{renderDeadline(lab)}</TableCell>
 
-              {/* Статус */}
-              <div>{renderStatus(lab.status)}</div>
+                  {/* Статус */}
+                  <TableCell className={styles.cell}>{renderStatus(lab.status)}</TableCell>
 
-              {/* Действие */}
-              <div>{renderAction(lab)}</div>
-            </div>
-          ))}
+                  {/* Действие */}
+                  <TableCell className={styles.cell}>{renderAction(lab)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       </div>
     </div>
