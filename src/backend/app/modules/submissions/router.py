@@ -2,6 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -52,3 +53,19 @@ def list_submissions(
 )
 def get_submission(submission_id: UUID, user: CurrentUser, db: Db):
     return service.get_submission(db, user.id, submission_id)
+
+
+@router.get(
+    "/submissions/{submission_id}/source",
+    response_class=PlainTextResponse,
+    responses={404: {"description": "Submission missing or owned by another user"}},
+)
+def download_source(submission_id: UUID, user: CurrentUser, db: Db):
+    submission = service.get_submission(db, user.id, submission_id)
+    return PlainTextResponse(
+        submission.source_code,
+        headers={
+            "Content-Disposition": f'attachment; filename="submission-{submission.id}.v"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )

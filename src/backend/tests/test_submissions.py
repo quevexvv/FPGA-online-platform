@@ -89,8 +89,11 @@ def test_submit_list_and_detail_preserve_exact_code_and_owner(client, headers):
     assert detail.headers["cache-control"] == "no-store"
 
 
+@pytest.mark.parametrize("suffix", ["", "/source"])
 @pytest.mark.parametrize("reader_role", ["student", "teacher"])
-def test_other_user_cannot_list_or_open_source_even_as_teacher(client, headers, reader_role):
+def test_other_user_cannot_list_or_open_source_even_as_teacher(
+    client, headers, reader_role, suffix
+):
     created = submit(client, headers).json()
     client.cookies.clear()
     login(client, "other@example.com")
@@ -98,11 +101,28 @@ def test_other_user_cannot_list_or_open_source_even_as_teacher(client, headers, 
         db.scalar(select(User).where(User.email == "other@example.com")).role = reader_role
         db.commit()
     assert client.get(SUBMIT_PATH).json() == []
-    foreign = client.get(f"/submissions/{created['id']}")
-    missing = client.get(f"/submissions/{uuid4()}")
+    foreign = client.get(f"/submissions/{created['id']}{suffix}")
+    missing = client.get(f"/submissions/{uuid4()}{suffix}")
     assert foreign.status_code == missing.status_code == 404
     assert foreign.json() == missing.json() == {"detail": "Submission not found"}
     assert foreign.headers["cache-control"] == "no-store"
+
+
+def test_download_preserves_utf8_and_line_endings_after_lab_is_unpublished(client, headers):
+    created = submit(client, headers).json()
+    with client.app.state.session_factory() as db:
+        db.get(Lab, DEMO_LAB_ID).is_published = False
+        db.commit()
+    response = client.get(f"/submissions/{created['id']}/source")
+    assert response.status_code == 200
+    assert response.content == SOURCE.encode("utf-8")
+    assert response.headers["content-type"] == "text/plain; charset=utf-8"
+    assert response.headers["content-disposition"] == (
+        f'attachment; filename="submission-{created["id"]}.v"'
+    )
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["cache-control"] == "no-store"
+    assert count_submissions(client) == 1
 
 
 @pytest.mark.parametrize("state", ["anonymous", "forged", "expired", "inactive", "logged_out"])
@@ -127,6 +147,9 @@ def test_all_routes_reject_invalid_sessions(client, headers, state):
     assert submit(client, headers).status_code == 401
     assert client.get(SUBMIT_PATH).status_code == 401
     assert client.get(f"/submissions/{created['id']}").status_code == 401
+    download = client.get(f"/submissions/{created['id']}/source")
+    assert download.status_code == 401
+    assert download.headers["cache-control"] == "no-store"
     assert count_submissions(client) == 1
 
 
