@@ -11,7 +11,9 @@ import {
   tokens,
 } from '@fluentui/react-components';
 import { mockLabs } from '../mockLabs';
-import { LabItem } from '../types';
+import { StatusBadge } from '../components/labs/StatusBadge';
+import { Deadline } from '../components/labs/Deadline';
+import { LabAction } from '../components/labs/LabAction';
 
 const useStyles = makeStyles({
   pageContainer: {
@@ -94,68 +96,6 @@ const useStyles = makeStyles({
     fontSize: '14px',
     color: tokens.colorNeutralForeground2,
   },
-  badgeCompleted: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    padding: '4px 12px',
-    borderRadius: '12px',
-    fontSize: '12px',
-    fontWeight: '700',
-    backgroundColor: tokens.colorStatusSuccessBackground1,
-    color: tokens.colorStatusSuccessForeground1,
-    width: 'fit-content',
-  },
-  badgeInProgress: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    padding: '4px 12px',
-    borderRadius: '12px',
-    fontSize: '12px',
-    fontWeight: '700',
-    backgroundColor: tokens.colorStatusWarningBackground1,
-    color: tokens.colorStatusWarningForeground1,
-    width: 'fit-content',
-  },
-  badgeNotStarted: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    padding: '4px 12px',
-    borderRadius: '12px',
-    fontSize: '12px',
-    fontWeight: '700',
-    backgroundColor: tokens.colorNeutralBackground3,
-    color: tokens.colorNeutralForeground3,
-    width: 'fit-content',
-  },
-  actionButton: {
-    background: 'none',
-    border: 'none',
-    padding: 0,
-    fontFamily: 'inherit',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-  },
-  actionGreen: {
-    color: tokens.colorBrandForeground1,
-  },
-  actionOrange: {
-    color: tokens.colorStatusWarningForeground1,
-  },
-  actionBlocked: {
-    fontSize: '14px',
-    fontWeight: '600',
-    color: tokens.colorNeutralForegroundDisabled,
-  },
-  // Срок сдачи: выделяем только сегодняшний и уже сданный
-  deadlineToday: {
-    fontWeight: '600',
-    color: tokens.colorStatusWarningForeground1,
-  },
-  deadlineCompleted: {
-    fontWeight: '600',
-    color: tokens.colorStatusSuccessForeground1,
-  },
 });
 
 interface LabsPageProps {
@@ -174,53 +114,6 @@ export const LabsPage: React.FC<LabsPageProps> = ({ onOpenTask, onOpenCode }) =>
     { key: 'status', label: 'СТАТУС', width: '13%' },
     { key: 'action', label: 'ДЕЙСТВИЕ', width: '13%' },
   ];
-
-  const renderStatus = (status: LabItem['status']) => {
-    switch (status) {
-      case 'completed':
-        return <span className={styles.badgeCompleted}>Выполнено</span>;
-      case 'in_progress':
-        return <span className={styles.badgeInProgress}>В работе</span>;
-      case 'not_started':
-        return <span className={styles.badgeNotStarted}>Не начато</span>;
-    }
-  };
-
-  const renderDeadline = (lab: LabItem) => {
-    if (lab.deadlineType === 'today') {
-      return <span className={styles.deadlineToday}>{lab.deadline}</span>;
-    }
-    if (lab.deadlineType === 'completed') {
-      return <span className={styles.deadlineCompleted}>{lab.deadline}</span>;
-    }
-    return <span>{lab.deadline}</span>;
-  };
-
-  const renderAction = (lab: LabItem) => {
-  if (lab.isLocked) {
-    return <span className={styles.actionBlocked}>Заблокировано</span>;
-  }
-  if (lab.status === 'completed') {
-    return (
-      <button
-        type="button"
-        className={mergeClasses(styles.actionButton, styles.actionGreen)}
-        onClick={onOpenCode}
-      >
-        Посмотреть код →
-      </button>
-    );
-  }
-  return (
-    <button
-      type="button"
-      className={mergeClasses(styles.actionButton, styles.actionOrange)}
-      onClick={onOpenTask}
-    >
-      Открыть задачу →
-    </button>
-  );
-};
 
   return (
     <div className={styles.pageContainer}>
@@ -262,13 +155,22 @@ export const LabsPage: React.FC<LabsPageProps> = ({ onOpenTask, onOpenCode }) =>
                   </TableCell>
 
                   {/* Срок сдачи */}
-                  <TableCell className={styles.cell}>{renderDeadline(lab)}</TableCell>
-
+                  <TableCell className={styles.cell}>
+                    <Deadline date={lab.deadline} type={lab.deadlineType} />
+                  </TableCell>
                   {/* Статус */}
-                  <TableCell className={styles.cell}>{renderStatus(lab.status)}</TableCell>
-
+                  <TableCell className={styles.cell}>
+                    <StatusBadge status={lab.status} />
+                  </TableCell>
                   {/* Действие */}
-                  <TableCell className={styles.cell}>{renderAction(lab)}</TableCell>
+                  <TableCell className={styles.cell}>
+                    <LabAction
+                      status={lab.status}
+                      isLocked={lab.isLocked}
+                      onOpenTask={onOpenTask}
+                      onOpenCode={onOpenCode}
+                    />
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
