@@ -100,10 +100,9 @@ const useStyles = makeStyles({
 
 interface LabsPageProps {
   onOpenTask: () => void;
-  onOpenCode: () => void;
 }
 
-export const LabsPage: React.FC<LabsPageProps> = ({ onOpenTask, onOpenCode }) => {
+export const LabsPage: React.FC<LabsPageProps> = ({ onOpenTask }) => {
   const styles = useStyles();
 
   // Колонки таблицы: подпись и доля ширины (в сумме 100%)
@@ -168,7 +167,6 @@ export const LabsPage: React.FC<LabsPageProps> = ({ onOpenTask, onOpenCode }) =>
                       status={lab.status}
                       isLocked={lab.isLocked}
                       onOpenTask={onOpenTask}
-                      onOpenCode={onOpenCode}
                     />
                   </TableCell>
                 </TableRow>

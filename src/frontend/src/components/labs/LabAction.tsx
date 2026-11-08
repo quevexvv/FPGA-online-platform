@@ -11,6 +11,7 @@ const useStyles = makeStyles({
     fontFamily: 'inherit',
     fontSize: '14px',
     fontWeight: '600',
+    textAlign: 'left',
     cursor: 'pointer',
   },
   green: {
@@ -30,25 +31,20 @@ interface LabActionProps {
   status: LabStatus;
   isLocked: boolean;
   onOpenTask: () => void;
-  onOpenCode: () => void;
 }
 
-export const LabAction: React.FC<LabActionProps> = ({ status, isLocked, onOpenTask, onOpenCode }) => {
+export const LabAction: React.FC<LabActionProps> = ({ status, isLocked, onOpenTask }) => {
   const styles = useStyles();
 
   if (isLocked) {
     return <span className={styles.blocked}>Заблокировано</span>;
   }
-  if (status === 'completed') {
-    return (
-      <button type="button" className={mergeClasses(styles.button, styles.green)} onClick={onOpenCode}>
-        Посмотреть код →
-      </button>
-    );
-  }
+  
+  const colorClass = status === 'completed' ? styles.green : styles.orange;
+
   return (
-    <button type="button" className={mergeClasses(styles.button, styles.orange)} onClick={onOpenTask}>
-      Открыть задачу →
+    <button type="button" className={mergeClasses(styles.button, colorClass)} onClick={onOpenTask}>
+      Открыть задачу&nbsp;→
     </button>
   );
 };

@@ -1,5 +1,5 @@
 export type TabType = 'labs' | 'workspace' | 'booking' | 'history';
-export type PageType = TabType | 'lab-task' | 'lab-code';
+export type PageType = TabType | 'lab-task';
 export type LabStatus = 'completed' | 'in_progress' | 'not_started';
 
 export interface LabItem {
