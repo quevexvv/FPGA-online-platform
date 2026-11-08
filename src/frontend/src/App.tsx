@@ -8,7 +8,6 @@ import { WorkspacePage } from './pages/WorkspacePage';
 import { BookingPage } from './pages/BookingPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { LabTaskPage } from './pages/LabTaskPage';
-import { LabCodePage } from './pages/LabCodePage';
 import { PageType, TabType } from './types';
 
 const useStyles = makeStyles({
@@ -29,8 +28,7 @@ export const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<PageType>('labs');
 
 // Страницы задания и кода открываются из лабораторных, поэтому в шапке активна эта вкладка
-  const currentTab: TabType = 
-    currentPage === 'lab-task' || currentPage === 'lab-code' ? 'labs' : currentPage;
+  const currentTab: TabType = currentPage === 'lab-task' ? 'labs' : currentPage;
 
   return (
     <FluentProvider theme={isDarkMode ? customDarkTheme : customLightTheme}>
@@ -48,17 +46,11 @@ export const App: React.FC = () => {
 
           {/* Тело страниц */}
           <main style={{ flex: 1, overflow: 'hidden' }}>
-            {currentPage === 'labs' && (
-              <LabsPage
-                onOpenTask={() => setCurrentPage('lab-task')}
-                onOpenCode={() => setCurrentPage('lab-code')}
-                />
-            )}
+            {currentPage === 'labs' && <LabsPage onOpenTask={() => setCurrentPage('lab-task')} />}
             {currentPage === 'workspace' && <WorkspacePage />}
             {currentPage === 'booking' && <BookingPage />}
             {currentPage === 'history' && <HistoryPage />}
             {currentPage === 'lab-task' && <LabTaskPage />}
-            {currentPage === 'lab-code' && <LabCodePage />}
           </main>
         </div>
       )}
