@@ -12,7 +12,7 @@ VVP ?= vvp
 .PHONY: all test lint syntax
 all: syntax build/test-serial build/fpga-uart
 	@test -x bin/fpga-dispatch && test -x bin/fpga-run
-	@echo 'Host checks built; dispatcher pipeline is not implemented.'
+	@echo 'Host checks built; the dispatcher supports job registration.'
 
 syntax:
 	@for file in $(SHELL_FILES); do bash -n "$$file" || exit; done
@@ -22,7 +22,7 @@ test: all
 	@$(MAKE) --no-print-directory test-serial
 	@$(MAKE) --no-print-directory test-session
 	@bash tests/scaffold.sh
-	@bash tests/pipeline-placeholder.sh
+	@bash tests/dispatch.sh
 	@bash tests/contract.sh
 	@bash tests/analyst-contract.sh
 	@bash tests/prepare-job.sh
