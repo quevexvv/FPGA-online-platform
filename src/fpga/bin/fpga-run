@@ -73,6 +73,8 @@ write_json() {
 }
 
 started_at=
+planned=0
+comparison=/dev/null
 finish_run() {
     local result=$1 stage=$2 code=$3 message=$4 now log logs
     local log_files=()
@@ -84,11 +86,13 @@ finish_run() {
     # shellcheck disable=SC2016
     write_json "$output/result.json" --arg id "$id" --arg mode "$mode" --arg result "$result" \
         --arg started "$started_at" --arg now "$now" --arg stage "$stage" --arg code "$code" \
-        --arg message "$message" --argjson logs "$logs" '
-        {schema_version:1,run_id:$id,mode:$mode,status:$result,hardware_verified:false,
+        --arg message "$message" --argjson logs "$logs" --argjson planned "$planned" \
+        --slurpfile comparison "$comparison" '
+        {schema_version:1,run_id:$id,mode:$mode,status:$result,
+         hardware_verified:($mode == "hardware" and ($result == "passed" or $result == "mismatch")),
          started_at:($started | select(length>0) // null),finished_at:$now,
-         summary:{planned:0,executed:0,passed:0,failed:0},observations:[],
-         error:{stage:$stage,code:$code,message:$message},logs:$logs}'
+         error:(if $code == "" then null else {stage:$stage,code:$code,message:$message} end),logs:$logs}
+        + ($comparison[0] // {summary:{planned:$planned,executed:0,passed:0,failed:0},observations:[]})'
     # shellcheck disable=SC2016
     write_json "$output/status.json" --arg id "$id" --arg mode "$mode" --arg result "$result" \
         --arg started "$started_at" --arg now "$now" '
@@ -157,6 +161,7 @@ vectors=$work/test-set.json
 if ! safe_file "$vectors" || ! jq -es -f "$project/scripts/test-set.jq" "$vectors" >/dev/null; then
     finish_run internal_error validating test_set_invalid 'Prepared test set is missing or invalid'
 fi
+planned=$(jq 'length' "$vectors")
 plan=$(jq -r '.[] | [.reset_before, .din, .steps] | @tsv' "$vectors")
 commands=$work/uart-commands
 (
@@ -253,6 +258,11 @@ report=$work/observations.json
 if ! safe_file "$replies"; then replies=/dev/null; fi
 jq -cn --slurpfile vectors "$vectors" --rawfile replies "$replies" \
     -f "$project/scripts/observations.jq" > "$report"
+if ! jq -cn --slurpfile vectors "$vectors" --slurpfile report "$report" \
+    -f "$project/scripts/compare-vectors.jq" > "$work/comparison.json"; then
+    finish_run internal_error finalizing comparison_failed 'Cannot compare observations'
+fi
+comparison=$work/comparison.json
 case "$stage_result" in
     0) jq -e '.complete' "$report" >/dev/null ||
            finish_run board_error testing incomplete_observations 'UART did not return all observations' ;;
@@ -260,4 +270,7 @@ case "$stage_result" in
     129|130|143) finish_run internal_error testing interrupted 'UART testing was interrupted' ;;
     *) finish_run internal_error testing stage_failed 'Could not run the UART test' ;;
 esac
-finish_run internal_error finalizing comparison_unavailable 'Observations are ready; comparison is not available yet'
+if jq -e '.summary.failed == 0' "$comparison" >/dev/null; then
+    finish_run passed finalizing '' ''
+fi
+finish_run mismatch finalizing '' ''

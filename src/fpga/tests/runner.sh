@@ -4,10 +4,15 @@ cd -- "$(dirname -- "$0")/.."
 
 root=$(mktemp -d)
 active=
+peer=
 cleanup() {
     if [[ -n $active ]]; then
         kill -TERM "$active" 2>/dev/null || :
         wait "$active" || :
+    fi
+    if [[ -n $peer ]]; then
+        kill -TERM "$peer" 2>/dev/null || :
+        wait "$peer" || :
     fi
     chmod -R u+w -- "$root"
     rm -rf -- "$root"
@@ -228,3 +233,71 @@ jq -ecn --slurpfile vectors "$vectors" \
     -f scripts/observations.jq |
     jq -e '.complete == true and [.observations[].steps] == [0,3,1]' >/dev/null
 echo 'PASS: vector widths and complete or partial UART observations'
+
+run_with_peer() {
+    local transcript=$1 ready=$root/$id.port peer_code=0
+    ./build/test-uart-peer "$transcript" "$ready" &
+    peer=$!
+    for _ in {1..200}; do
+        [[ -s $ready ]] && break
+        sleep .01
+    done
+    [[ -s $ready ]]
+    config 2000 "$(<"$ready")"
+    run "$id" hardware
+    kill -TERM "$peer"
+    wait "$peer" || peer_code=$?
+    peer=
+    [[ $peer_code == 143 ]]
+}
+
+for bad in '2D00000' 'garbage'; do
+    if [[ $bad == '2D00000' ]]; then prepare_build 21 ok; else prepare_build 22 ok; fi
+    printf '1Q0000 %s\n' "$bad" > "$root/bad-frames"
+    run_with_peer "$root/bad-frames"
+    check_result "$id" board_error
+    check_code "$id" uart_not_ready
+    grep -q 'protocol:invalid_response' "$runs/$id/output/logs/uart.log"
+    [[ ! -e $runs/$id/output/logs/test.log ]]
+done
+
+for scenario in passed mismatch partial; do
+    case "$scenario" in
+        passed) prepare_build 23 ok; last='1D00003' ;;
+        mismatch) prepare_build 24 ok; last='1D00002' ;;
+        partial) prepare_build 25 ok; last=- ;;
+    esac
+    cat > "$runs/$id/work/test-set.json" <<'VECTORS'
+[
+  {"vector_index":0,"reset_before":true,"din":"0x001","steps":3,"expected_dout":"0x00003","mask":"0x00003"},
+  {"vector_index":1,"reset_before":false,"din":"0x002","steps":0,"expected_dout":"0x00003","mask":"0x3ffff"}
+]
+VECTORS
+    cat > "$root/frames" <<'FRAMES'
+1Q0000 1D00000
+1S0000 1K00000
+1Q0000 1D00000
+1R0000 1K00000
+1I0001 1K00000
+1S0003 1K00000
+1Q0000 1D00103
+1I0002 1K00000
+1S0000 1K00000
+FRAMES
+    printf '1Q0000 %s\n' "$last" >> "$root/frames"
+    run_with_peer "$root/frames"
+    result=$runs/$id/output/result.json
+    jq -e '.observations[0].dout == "0x00103" and .observations[0].match' "$result" >/dev/null
+    case "$scenario" in
+        passed|mismatch)
+            check_result "$id" "$scenario"
+            jq -e '.hardware_verified and .summary.executed == 2 and .error == null' "$result" >/dev/null
+            ;;
+        partial)
+            check_result "$id" board_error
+            check_code "$id" uart_test_failed
+            jq -e '.summary == {planned:2,executed:1,passed:1,failed:0}' "$result" >/dev/null
+            ;;
+    esac
+done
+echo 'PASS: UART probe, masked pass, full mismatch and partial board result'
