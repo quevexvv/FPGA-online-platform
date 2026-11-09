@@ -5,12 +5,12 @@ CFLAGS := -std=c11 -Wall -Wextra -Wpedantic
 SHELLCHECK ?= shellcheck
 
 SHELL_FILES := bin/fpga-dispatch bin/fpga-run $(wildcard scripts/*.sh tests/*.sh)
-C_FILES := $(wildcard src/uart/*.c tests/*.c)
+C_FILES := $(wildcard src/uart/*.c src/runner/*.c tests/*.c)
 IVERILOG ?= iverilog
 VVP ?= vvp
 
 .PHONY: all test lint syntax
-all: syntax build/test-serial build/fpga-uart
+all: syntax build/test-serial build/fpga-uart build/fpga-stage
 	@test -x bin/fpga-dispatch && test -x bin/fpga-run
 	@echo 'Host checks built; the dispatcher supports job registration.'
 
@@ -24,6 +24,7 @@ test: all
 	@bash tests/scaffold.sh
 	@bash tests/dispatch.sh
 	@bash tests/runner.sh
+	@bash tests/stage.sh
 	@bash tests/contract.sh
 	@bash tests/analyst-contract.sh
 	@bash tests/prepare-job.sh
@@ -48,6 +49,10 @@ build/fpga-uart: src/uart/session.c src/uart/serial.c src/uart/serial.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) src/uart/session.c src/uart/serial.c -o $@
 
 build/test-session: tests/session.c
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@
+
+build/fpga-stage: src/runner/stage.c
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@
 
