@@ -72,6 +72,7 @@ flock -n "$runs/.stand.lock" true
 echo 'PASS: executor registration, busy result and lock release'
 
 tool=$root/'fake quartus'
+programmer=$root/'fake programmer'
 export FPGA_RUN_CONFIG=$root/config.json
 export FPGA_TEST_PRIVATE='must not reach the stage'
 cat > "$tool" <<'QUARTUS'
@@ -99,10 +100,24 @@ case $(< scenario) in
 esac
 QUARTUS
 chmod +x -- "$tool"
+cat > "$programmer" <<'PROGRAMMER'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ $# -eq 6 && $1 == -c && $2 == 'USB-Blaster [test]' && $3 == -m && $4 == JTAG &&
+   $5 == -o && $6 == 'p;output_files/job.sof@1' && -s output_files/job.sof ]]
+[[ ! -v FPGA_TEST_PRIVATE ]]
+echo 'programmer started'
+[[ ! -f program-fail ]]
+PROGRAMMER
+chmod +x -- "$programmer"
 
 config() {
-    jq -cn --arg executable "$tool" --argjson timeout "$1" \
-        '{quartus_sh:$executable,build_timeout_ms:$timeout,max_log_bytes:2048}' > "$FPGA_RUN_CONFIG"
+    jq -cn --arg executable "$tool" --arg programmer "$programmer" \
+        --argjson timeout "$1" --arg port "${2:-/dev/null}" '
+        {quartus_sh:$executable,quartus_pgm:$programmer,jtag_cable:"USB-Blaster [test]",
+         jtag_device_index:1,uart_device:$port,build_timeout_ms:$timeout,program_timeout_ms:2000,
+         uart_ready_timeout_ms:300,uart_timeout_ms:100,max_log_bytes:2048}
+    ' > "$FPGA_RUN_CONFIG"
 }
 prepare_build() {
     id=aaaaaaaa-bbbb-cccc-dddd-0000000000$1
@@ -142,10 +157,12 @@ flock -n "$runs/.stand.lock" true
 
 prepare_build 12 ok
 run "$id" hardware
-check_result "$id" internal_error
-check_code "$id" programming_unavailable
+check_result "$id" board_error
+check_code "$id" uart_not_ready
 [[ -s $project/output_files/job.sof ]]
 grep -Fxq 'quartus started' "$runs/$id/output/logs/build.log"
+grep -Fxq 'programmer started' "$runs/$id/output/logs/program.log"
+grep -q 'transport:open' "$runs/$id/output/logs/uart.log"
 
 for scenario in fail missing linked; do
     case "$scenario" in
@@ -176,3 +193,19 @@ check_code "$id" build_timeout
 ! kill -0 "$(<"$project/escaped")" 2>/dev/null || exit 1
 flock -n "$runs/.stand.lock" true
 echo 'PASS: Quartus stage, active stand lock, failure, timeout and stale artifact'
+
+config 2000
+prepare_build 18 ok
+touch -- "$project/program-fail"
+run "$id" hardware
+check_result "$id" board_error
+check_code "$id" program_failed
+[[ ! -e $runs/$id/output/logs/uart.log ]]
+
+config 2000 "$root/missing-port"
+prepare_build 19 ok
+run "$id" hardware
+check_result "$id" board_error
+check_code "$id" uart_not_ready
+[[ -f $runs/$id/output/logs/uart.log ]]
+echo 'PASS: programmer arguments, programming failure and absent UART'

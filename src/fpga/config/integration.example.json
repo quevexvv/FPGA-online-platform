@@ -2,6 +2,12 @@
   "jobs_root": null,
   "uart_device": null,
   "quartus_sh": null,
+  "quartus_pgm": null,
+  "jtag_cable": null,
+  "jtag_device_index": null,
   "build_timeout_ms": null,
+  "program_timeout_ms": null,
+  "uart_ready_timeout_ms": null,
+  "uart_timeout_ms": null,
   "max_log_bytes": null
 }
