@@ -106,4 +106,80 @@ case "$lock_result" in
     *) finish_run internal_error locking stand_lock_error 'Cannot lock the stand' ;;
 esac
 
-finish_run internal_error finalizing stage_unavailable 'Execution stages are not available yet'
+if [[ $mode == mock ]]; then
+    finish_run internal_error validating mock_unavailable 'Mock execution is not available yet'
+fi
+
+config=${FPGA_RUN_CONFIG:-}
+if [[ $config != /* ]] || ! safe_file "$config"; then
+    finish_run internal_error validating config_invalid 'Set FPGA_RUN_CONFIG to the stand configuration'
+fi
+settings=$(jq -ers '
+    def limit: type == "number" and . == floor and . >= 1 and . <= 2147483647;
+    select(length == 1) | .[0] |
+    select((.quartus_sh | type == "string" and startswith("/") and (test("[[:cntrl:]]") | not)) and
+           (.build_timeout_ms | limit) and (.max_log_bytes | limit)) |
+    .quartus_sh, (.build_timeout_ms | tostring), (.max_log_bytes | tostring)
+' "$config") || finish_run internal_error validating config_invalid 'Quartus path or stage limits are invalid'
+mapfile -t limits <<< "$settings"
+quartus=${limits[0]}
+[[ -f $quartus && -x $quartus ]] ||
+    finish_run internal_error validating config_invalid 'Configured Quartus executable is missing'
+project=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+[[ -x $project/build/fpga-stage ]] ||
+    finish_run internal_error validating stage_missing 'Build the stage supervisor with make all'
+
+quartus_dir=$work/quartus
+artifacts=$quartus_dir/output_files
+safe_dir "$quartus_dir" || finish_run internal_error building project_missing 'Prepared project is missing'
+for file in job.qpf job.qsf wrapper_base.qsf wrapper.sdc; do
+    safe_file "$quartus_dir/$file" ||
+        finish_run internal_error building project_missing 'Prepared project is missing'
+done
+if [[ -e $artifacts || -L $artifacts ]]; then
+    finish_run build_error building output_exists 'Quartus output directory already exists'
+fi
+mkdir -- "$work/home" "$work/tmp" ||
+    finish_run internal_error building workspace_error 'Cannot create private Quartus directories'
+
+started_at=$(timestamp)
+# shellcheck disable=SC2016
+write_json "$output/status.json" --arg id "$id" --arg mode "$mode" --arg started "$started_at" '
+    {schema_version:1,run_id:$id,mode:$mode,state:"running",stage:"building",
+     started_at:$started,updated_at:$started,finished_at:null,result_status:null}'
+
+interrupted=false
+trap 'interrupted=true' HUP INT TERM
+build_log=logs/build.log
+(
+    cd -- "$quartus_dir" || exit 125
+    exec env -i PATH=/usr/bin:/bin LC_ALL=C HOME="$work/home" TMPDIR="$work/tmp" \
+        "$project/build/fpga-stage" "${limits[1]}" "${limits[2]}" "$output/$build_log" \
+        -- "$quartus" --flow compile job
+) &
+stage_pid=$!
+stage_result=0
+if [[ $interrupted == false ]]; then
+    wait "$stage_pid" || stage_result=$?
+fi
+if [[ $interrupted == true ]]; then
+    trap '' HUP INT TERM
+    kill -TERM "$stage_pid" 2>/dev/null || :
+    wait "$stage_pid" || :
+    stage_result=143
+fi
+trap - HUP INT TERM
+
+safe_file "$output/$build_log" || build_log=
+case "$stage_result" in
+    0) ;;
+    124) finish_run build_error building build_timeout 'Quartus build timed out' "$build_log" ;;
+    1) finish_run build_error building quartus_failed 'Quartus build failed' "$build_log" ;;
+    129|130|143) finish_run internal_error building interrupted 'Build was interrupted' "$build_log" ;;
+    *) finish_run internal_error building stage_failed 'Could not run Quartus build' "$build_log" ;;
+esac
+sof=$artifacts/job.sof
+if ! safe_dir "$artifacts" || ! safe_file "$sof" || [[ ! -s $sof || $(stat -c %h -- "$sof") != 1 ]]; then
+    finish_run build_error building missing_sof 'Quartus did not create a new job.sof' "$build_log"
+fi
+finish_run internal_error programming programming_unavailable 'Build completed; programming is not available yet' "$build_log"

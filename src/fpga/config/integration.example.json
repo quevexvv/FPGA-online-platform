@@ -1,4 +1,7 @@
 {
   "jobs_root": null,
-  "uart_device": null
+  "uart_device": null,
+  "quartus_sh": null,
+  "build_timeout_ms": null,
+  "max_log_bytes": null
 }
