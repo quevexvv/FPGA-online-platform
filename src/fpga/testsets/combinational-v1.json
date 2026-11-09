@@ -1,0 +1,10 @@
+[
+  {
+    "vector_index": 0,
+    "reset_before": false,
+    "din": "0x2aa",
+    "steps": 0,
+    "expected_dout": "0x002aa",
+    "mask": "0x3ffff"
+  }
+]
