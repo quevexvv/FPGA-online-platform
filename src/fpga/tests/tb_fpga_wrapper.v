@@ -67,6 +67,25 @@ initial begin
     exchange("1R00000\n", "1E00002\n");
     exchange("1Q0000\n", COMBINATIONAL ? "1D00002\n" : "1D00005\n");
     if (edges != 4 || reset_edges != 2) $fatal(1, "Error request changed DUT");
+    exchange("1R0000\n", "1K00000\n");
+    exchange("1I0001\n", "1K00000\n");
+    exchange("1S0000\n", "1K00000\n");
+    exchange("1Q0000\n", COMBINATIONAL ? "1D00001\n" : "1D00000\n");
+    exchange("1S0001\n", "1K00000\n");
+    exchange("1Q0000\n", "1D00001\n");
+    exchange("1S0007\n", "1K00000\n");
+    exchange("1Q0000\n", COMBINATIONAL ? "1D00001\n" : "1D00008\n");
+    exchange("1Sffff\n", "1K00000\n");
+    exchange("1S0002\n", "1K00000\n");
+    exchange("1Q0000\n", COMBINATIONAL ? "1D00001\n" : "1D10009\n");
+    #(BIT_NS * 1000);
+    exchange("1Q0000\n", COMBINATIONAL ? "1D00001\n" : "1D10009\n");
+    if (edges != 65549 || reset_edges != 4) $fatal(1, "Burst or idle edge mismatch");
+    exchange("1R0000\n", "1K00000\n");
+    exchange("1Q0000\n", COMBINATIONAL ? "1D00001\n" : "1D00000\n");
+    exchange("1S0003\n", "1K00000\n");
+    exchange("1Q0000\n", COMBINATIONAL ? "1D00001\n" : "1D00003\n");
+    if (edges != 65552 || reset_edges != 6) $fatal(1, "Restart edge mismatch");
     $display("PASS: full UART wrapper, combinational=%0d", COMBINATIONAL); $finish;
 end
 endmodule

@@ -88,6 +88,11 @@ test-wrapper:
 	$(IVERILOG) -g2001 -Wall -s tb_fpga_wrapper -Ptb_fpga_wrapper.COMBINATIONAL=1 -o build/tb_wrapper_combinational tests/tb_fpga_wrapper.v $(WRAPPER_HDL) examples/combinational/student_top.v
 	$(VVP) build/tb_wrapper_combinational
 
+.PHONY: test-hardware
+test-hardware: export UART_PORT
+test-hardware: build/fpga-uart
+	@bash tests/step-hardware.sh "$${UART_PORT:-}"
+
 .PHONY: test-dut-control
 test-dut-control:
 	@mkdir -p build
