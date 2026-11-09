@@ -4,10 +4,15 @@ cd -- "$(dirname -- "$0")/.."
 
 root=$(mktemp -d)
 active=
+peer=
 cleanup() {
     if [[ -n $active ]]; then
         kill -TERM "$active" 2>/dev/null || :
         wait "$active" || :
+    fi
+    if [[ -n $peer ]]; then
+        kill -TERM "$peer" 2>/dev/null || :
+        wait "$peer" || :
     fi
     chmod -R u+w -- "$root"
     rm -rf -- "$root"
@@ -72,6 +77,7 @@ flock -n "$runs/.stand.lock" true
 echo 'PASS: executor registration, busy result and lock release'
 
 tool=$root/'fake quartus'
+programmer=$root/'fake programmer'
 export FPGA_RUN_CONFIG=$root/config.json
 export FPGA_TEST_PRIVATE='must not reach the stage'
 cat > "$tool" <<'QUARTUS'
@@ -99,10 +105,24 @@ case $(< scenario) in
 esac
 QUARTUS
 chmod +x -- "$tool"
+cat > "$programmer" <<'PROGRAMMER'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ $# -eq 6 && $1 == -c && $2 == 'USB-Blaster [test]' && $3 == -m && $4 == JTAG &&
+   $5 == -o && $6 == 'p;output_files/job.sof@1' && -s output_files/job.sof ]]
+[[ ! -v FPGA_TEST_PRIVATE ]]
+echo 'programmer started'
+[[ ! -f program-fail ]]
+PROGRAMMER
+chmod +x -- "$programmer"
 
 config() {
-    jq -cn --arg executable "$tool" --argjson timeout "$1" \
-        '{quartus_sh:$executable,build_timeout_ms:$timeout,max_log_bytes:2048}' > "$FPGA_RUN_CONFIG"
+    jq -cn --arg executable "$tool" --arg programmer "$programmer" \
+        --argjson timeout "$1" --arg port "${2:-/dev/null}" '
+        {quartus_sh:$executable,quartus_pgm:$programmer,jtag_cable:"USB-Blaster [test]",
+         jtag_device_index:1,uart_device:$port,build_timeout_ms:$timeout,program_timeout_ms:2000,
+         uart_ready_timeout_ms:300,uart_timeout_ms:100,test_timeout_ms:2000,max_log_bytes:2048}
+    ' > "$FPGA_RUN_CONFIG"
 }
 prepare_build() {
     id=aaaaaaaa-bbbb-cccc-dddd-0000000000$1
@@ -142,10 +162,12 @@ flock -n "$runs/.stand.lock" true
 
 prepare_build 12 ok
 run "$id" hardware
-check_result "$id" internal_error
-check_code "$id" programming_unavailable
+check_result "$id" board_error
+check_code "$id" uart_not_ready
 [[ -s $project/output_files/job.sof ]]
 grep -Fxq 'quartus started' "$runs/$id/output/logs/build.log"
+grep -Fxq 'programmer started' "$runs/$id/output/logs/program.log"
+grep -q 'transport:open' "$runs/$id/output/logs/uart.log"
 
 for scenario in fail missing linked; do
     case "$scenario" in
@@ -176,3 +198,106 @@ check_code "$id" build_timeout
 ! kill -0 "$(<"$project/escaped")" 2>/dev/null || exit 1
 flock -n "$runs/.stand.lock" true
 echo 'PASS: Quartus stage, active stand lock, failure, timeout and stale artifact'
+
+config 2000
+prepare_build 18 ok
+touch -- "$project/program-fail"
+run "$id" hardware
+check_result "$id" board_error
+check_code "$id" program_failed
+[[ ! -e $runs/$id/output/logs/uart.log ]]
+
+config 2000 "$root/missing-port"
+prepare_build 19 ok
+run "$id" hardware
+check_result "$id" board_error
+check_code "$id" uart_not_ready
+[[ -f $runs/$id/output/logs/uart.log ]]
+echo 'PASS: programmer arguments, programming failure and absent UART'
+
+prepare_build 20 ok
+printf '%s\n' '[{"vector_index":0,"reset_before":true,"din":"0x400","steps":0,
+                    "expected_dout":"0x00000","mask":"0x3ffff"}]' > "$runs/$id/work/test-set.json"
+run "$id" hardware
+check_result "$id" internal_error
+check_code "$id" test_set_invalid
+[[ ! -e $runs/$id/output/logs/build.log ]]
+
+vectors=examples/lab2/lab2_running_led.json
+jq -ecn --slurpfile vectors "$vectors" \
+    --arg replies $'K\nK\nK\nD 0x00001\nK\nK\nD 0x00008\nK\n' \
+    -f scripts/observations.jq |
+    jq -e '.complete == false and [.observations[].dout] == ["0x00001","0x00008"]' >/dev/null
+jq -ecn --slurpfile vectors "$vectors" \
+    --arg replies $'K\nK\nK\nD 0x00001\nK\nK\nD 0x00008\nK\nK\nD 0x00004\n' \
+    -f scripts/observations.jq |
+    jq -e '.complete == true and [.observations[].steps] == [0,3,1]' >/dev/null
+echo 'PASS: vector widths and complete or partial UART observations'
+
+run_with_peer() {
+    local transcript=$1 ready=$root/$id.port peer_code=0
+    ./build/test-uart-peer "$transcript" "$ready" &
+    peer=$!
+    for _ in {1..200}; do
+        [[ -s $ready ]] && break
+        sleep .01
+    done
+    [[ -s $ready ]]
+    config 2000 "$(<"$ready")"
+    run "$id" hardware
+    kill -TERM "$peer"
+    wait "$peer" || peer_code=$?
+    peer=
+    [[ $peer_code == 143 ]]
+}
+
+for bad in '2D00000' 'garbage'; do
+    if [[ $bad == '2D00000' ]]; then prepare_build 21 ok; else prepare_build 22 ok; fi
+    printf '1Q0000 %s\n' "$bad" > "$root/bad-frames"
+    run_with_peer "$root/bad-frames"
+    check_result "$id" board_error
+    check_code "$id" uart_not_ready
+    grep -q 'protocol:invalid_response' "$runs/$id/output/logs/uart.log"
+    [[ ! -e $runs/$id/output/logs/test.log ]]
+done
+
+for scenario in passed mismatch partial; do
+    case "$scenario" in
+        passed) prepare_build 23 ok; last='1D00003' ;;
+        mismatch) prepare_build 24 ok; last='1D00002' ;;
+        partial) prepare_build 25 ok; last=- ;;
+    esac
+    cat > "$runs/$id/work/test-set.json" <<'VECTORS'
+[
+  {"vector_index":0,"reset_before":true,"din":"0x001","steps":3,"expected_dout":"0x00003","mask":"0x00003"},
+  {"vector_index":1,"reset_before":false,"din":"0x002","steps":0,"expected_dout":"0x00003","mask":"0x3ffff"}
+]
+VECTORS
+    cat > "$root/frames" <<'FRAMES'
+1Q0000 1D00000
+1S0000 1K00000
+1Q0000 1D00000
+1R0000 1K00000
+1I0001 1K00000
+1S0003 1K00000
+1Q0000 1D00103
+1I0002 1K00000
+1S0000 1K00000
+FRAMES
+    printf '1Q0000 %s\n' "$last" >> "$root/frames"
+    run_with_peer "$root/frames"
+    result=$runs/$id/output/result.json
+    jq -e '.observations[0].dout == "0x00103" and .observations[0].match' "$result" >/dev/null
+    case "$scenario" in
+        passed|mismatch)
+            check_result "$id" "$scenario"
+            jq -e '.hardware_verified and .summary.executed == 2 and .error == null' "$result" >/dev/null
+            ;;
+        partial)
+            check_result "$id" board_error
+            check_code "$id" uart_test_failed
+            jq -e '.summary == {planned:2,executed:1,passed:1,failed:0}' "$result" >/dev/null
+            ;;
+    esac
+done
+echo 'PASS: UART probe, masked pass, full mismatch and partial board result'

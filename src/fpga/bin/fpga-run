@@ -73,17 +73,26 @@ write_json() {
 }
 
 started_at=
+planned=0
+comparison=/dev/null
 finish_run() {
-    local result=$1 stage=$2 code=$3 message=$4 log=${5:-} now
+    local result=$1 stage=$2 code=$3 message=$4 now log logs
+    local log_files=()
     now=$(timestamp)
+    for log in logs/{build,program,uart,test}.log; do
+        if safe_file "$output/$log"; then log_files+=("$log"); fi
+    done
+    logs=$(jq -cn --args '$ARGS.positional' "${log_files[@]}")
     # shellcheck disable=SC2016
     write_json "$output/result.json" --arg id "$id" --arg mode "$mode" --arg result "$result" \
         --arg started "$started_at" --arg now "$now" --arg stage "$stage" --arg code "$code" \
-        --arg message "$message" --arg log "$log" '
-        {schema_version:1,run_id:$id,mode:$mode,status:$result,hardware_verified:false,
+        --arg message "$message" --argjson logs "$logs" --argjson planned "$planned" \
+        --slurpfile comparison "$comparison" '
+        {schema_version:1,run_id:$id,mode:$mode,status:$result,
+         hardware_verified:($mode == "hardware" and ($result == "passed" or $result == "mismatch")),
          started_at:($started | select(length>0) // null),finished_at:$now,
-         summary:{planned:0,executed:0,passed:0,failed:0},observations:[],
-         error:{stage:$stage,code:$code,message:$message},logs:[$log | select(length>0)]}'
+         error:(if $code == "" then null else {stage:$stage,code:$code,message:$message} end),logs:$logs}
+        + ($comparison[0] // {summary:{planned:$planned,executed:0,passed:0,failed:0},observations:[]})'
     # shellcheck disable=SC2016
     write_json "$output/status.json" --arg id "$id" --arg mode "$mode" --arg result "$result" \
         --arg started "$started_at" --arg now "$now" '
@@ -116,18 +125,52 @@ if [[ $config != /* ]] || ! safe_file "$config"; then
 fi
 settings=$(jq -ers '
     def limit: type == "number" and . == floor and . >= 1 and . <= 2147483647;
+    def text: type == "string" and length > 0 and (test("[[:cntrl:]]") | not);
+    def path: text and startswith("/");
     select(length == 1) | .[0] |
-    select((.quartus_sh | type == "string" and startswith("/") and (test("[[:cntrl:]]") | not)) and
-           (.build_timeout_ms | limit) and (.max_log_bytes | limit)) |
-    .quartus_sh, (.build_timeout_ms | tostring), (.max_log_bytes | tostring)
-' "$config") || finish_run internal_error validating config_invalid 'Quartus path or stage limits are invalid'
-mapfile -t limits <<< "$settings"
-quartus=${limits[0]}
-[[ -f $quartus && -x $quartus ]] ||
-    finish_run internal_error validating config_invalid 'Configured Quartus executable is missing'
+    select((.quartus_sh | path) and (.quartus_pgm | path) and (.uart_device | path) and
+           (.jtag_cable | text) and (.jtag_device_index | limit) and
+           (.build_timeout_ms | limit) and (.max_log_bytes | limit) and
+           (.program_timeout_ms | limit) and (.uart_ready_timeout_ms | limit) and (.test_timeout_ms | limit) and
+           (.uart_timeout_ms | limit and . <= 60000)) |
+    .quartus_sh, .quartus_pgm, .jtag_cable, .jtag_device_index, .uart_device,
+    .build_timeout_ms, .program_timeout_ms, .uart_ready_timeout_ms, .uart_timeout_ms, .test_timeout_ms, .max_log_bytes
+' "$config") || finish_run internal_error validating config_invalid 'Stand tools or stage limits are invalid'
+{
+    IFS= read -r quartus
+    IFS= read -r programmer
+    IFS= read -r cable
+    IFS= read -r device_index
+    IFS= read -r uart_device
+    IFS= read -r build_timeout
+    IFS= read -r program_timeout
+    IFS= read -r uart_ready_timeout
+    IFS= read -r uart_timeout
+    IFS= read -r test_timeout
+    IFS= read -r max_log
+} <<< "$settings"
+for tool in "$quartus" "$programmer"; do
+    [[ -f $tool && -x $tool ]] ||
+        finish_run internal_error validating config_invalid 'Configured Quartus executable is missing'
+done
 project=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
-[[ -x $project/build/fpga-stage ]] ||
-    finish_run internal_error validating stage_missing 'Build the stage supervisor with make all'
+[[ -x $project/build/fpga-stage && -x $project/build/fpga-uart ]] ||
+    finish_run internal_error validating stage_missing 'Build the host tools with make all'
+
+vectors=$work/test-set.json
+if ! safe_file "$vectors" || ! jq -es -f "$project/scripts/test-set.jq" "$vectors" >/dev/null; then
+    finish_run internal_error validating test_set_invalid 'Prepared test set is missing or invalid'
+fi
+planned=$(jq 'length' "$vectors")
+plan=$(jq -r '.[] | [.reset_before, .din, .steps] | @tsv' "$vectors")
+commands=$work/uart-commands
+(
+    set -o noclobber
+    while IFS=$'\t' read -r reset din steps; do
+        if [[ $reset == true ]]; then printf '%s\n' reset; fi
+        printf 'input 0%s\nstep %04x\nread\n' "${din#0x}" "$steps"
+    done <<< "$plan" > "$commands"
+) || finish_run internal_error validating test_plan_failed 'Cannot prepare UART commands'
 
 quartus_dir=$work/quartus
 artifacts=$quartus_dir/output_files
@@ -142,44 +185,92 @@ fi
 mkdir -- "$work/home" "$work/tmp" ||
     finish_run internal_error building workspace_error 'Cannot create private Quartus directories'
 
+publish_stage() {
+    local stage=$1
+    # shellcheck disable=SC2016
+    write_json "$output/status.json" --arg id "$id" --arg mode "$mode" --arg started "$started_at" \
+        --arg stage "$stage" --arg now "$(timestamp)" '
+        {schema_version:1,run_id:$id,mode:$mode,state:"running",stage:$stage,
+         started_at:$started,updated_at:$now,finished_at:null,result_status:null}'
+}
+
+run_stage() {
+    local timeout=$1 log=$2 stage_pid
+    shift 2
+    interrupted=false
+    trap 'interrupted=true' HUP INT TERM
+    (
+        cd -- "$quartus_dir" || exit 125
+        exec env -i PATH=/usr/bin:/bin LC_ALL=C HOME="$work/home" TMPDIR="$work/tmp" \
+            "$project/build/fpga-stage" "$timeout" "$max_log" "$output/$log" -- "$@"
+    ) &
+    stage_pid=$!
+    stage_result=0
+    if [[ $interrupted == false ]]; then
+        wait "$stage_pid" || stage_result=$?
+    fi
+    if [[ $interrupted == true ]]; then
+        trap '' HUP INT TERM
+        kill -TERM "$stage_pid" 2>/dev/null || :
+        wait "$stage_pid" || :
+        stage_result=143
+    fi
+    trap - HUP INT TERM
+}
+
 started_at=$(timestamp)
-# shellcheck disable=SC2016
-write_json "$output/status.json" --arg id "$id" --arg mode "$mode" --arg started "$started_at" '
-    {schema_version:1,run_id:$id,mode:$mode,state:"running",stage:"building",
-     started_at:$started,updated_at:$started,finished_at:null,result_status:null}'
-
-interrupted=false
-trap 'interrupted=true' HUP INT TERM
-build_log=logs/build.log
-(
-    cd -- "$quartus_dir" || exit 125
-    exec env -i PATH=/usr/bin:/bin LC_ALL=C HOME="$work/home" TMPDIR="$work/tmp" \
-        "$project/build/fpga-stage" "${limits[1]}" "${limits[2]}" "$output/$build_log" \
-        -- "$quartus" --flow compile job
-) &
-stage_pid=$!
-stage_result=0
-if [[ $interrupted == false ]]; then
-    wait "$stage_pid" || stage_result=$?
-fi
-if [[ $interrupted == true ]]; then
-    trap '' HUP INT TERM
-    kill -TERM "$stage_pid" 2>/dev/null || :
-    wait "$stage_pid" || :
-    stage_result=143
-fi
-trap - HUP INT TERM
-
-safe_file "$output/$build_log" || build_log=
+publish_stage building
+run_stage "$build_timeout" logs/build.log "$quartus" --flow compile job
 case "$stage_result" in
     0) ;;
-    124) finish_run build_error building build_timeout 'Quartus build timed out' "$build_log" ;;
-    1) finish_run build_error building quartus_failed 'Quartus build failed' "$build_log" ;;
-    129|130|143) finish_run internal_error building interrupted 'Build was interrupted' "$build_log" ;;
-    *) finish_run internal_error building stage_failed 'Could not run Quartus build' "$build_log" ;;
+    124) finish_run build_error building build_timeout 'Quartus build timed out' ;;
+    1) finish_run build_error building quartus_failed 'Quartus build failed' ;;
+    129|130|143) finish_run internal_error building interrupted 'Build was interrupted' ;;
+    *) finish_run internal_error building stage_failed 'Could not run Quartus build' ;;
 esac
 sof=$artifacts/job.sof
 if ! safe_dir "$artifacts" || ! safe_file "$sof" || [[ ! -s $sof || $(stat -c %h -- "$sof") != 1 ]]; then
-    finish_run build_error building missing_sof 'Quartus did not create a new job.sof' "$build_log"
+    finish_run build_error building missing_sof 'Quartus did not create a new job.sof'
 fi
-finish_run internal_error programming programming_unavailable 'Build completed; programming is not available yet' "$build_log"
+publish_stage programming
+run_stage "$program_timeout" logs/program.log "$programmer" -c "$cable" -m JTAG \
+    -o "p;output_files/job.sof@$device_index"
+case "$stage_result" in
+    0) ;;
+    124) finish_run board_error programming program_timeout 'Programming timed out' ;;
+    1) finish_run board_error programming program_failed 'Quartus could not program the board' ;;
+    129|130|143) finish_run internal_error programming interrupted 'Programming was interrupted' ;;
+    *) finish_run internal_error programming stage_failed 'Could not run the programmer' ;;
+esac
+run_stage "$uart_ready_timeout" logs/uart.log bash "$project/scripts/uart-job.sh" \
+    "$project/build/fpga-uart" "$uart_device" "$uart_timeout" probe
+case "$stage_result" in
+    0) ;;
+    1|124) finish_run board_error programming uart_not_ready 'UART readiness check failed' ;;
+    129|130|143) finish_run internal_error programming interrupted 'UART readiness check was interrupted' ;;
+    *) finish_run internal_error programming stage_failed 'Could not run the UART readiness check' ;;
+esac
+publish_stage testing
+replies=$work/uart-replies
+run_stage "$test_timeout" logs/test.log bash "$project/scripts/uart-job.sh" \
+    "$project/build/fpga-uart" "$uart_device" "$uart_timeout" vectors "$commands" "$replies"
+report=$work/observations.json
+if ! safe_file "$replies"; then replies=/dev/null; fi
+jq -cn --slurpfile vectors "$vectors" --rawfile replies "$replies" \
+    -f "$project/scripts/observations.jq" > "$report"
+if ! jq -cn --slurpfile vectors "$vectors" --slurpfile report "$report" \
+    -f "$project/scripts/compare-vectors.jq" > "$work/comparison.json"; then
+    finish_run internal_error finalizing comparison_failed 'Cannot compare observations'
+fi
+comparison=$work/comparison.json
+case "$stage_result" in
+    0) jq -e '.complete' "$report" >/dev/null ||
+           finish_run board_error testing incomplete_observations 'UART did not return all observations' ;;
+    1|124) finish_run board_error testing uart_test_failed 'UART test ended before all vectors completed' ;;
+    129|130|143) finish_run internal_error testing interrupted 'UART testing was interrupted' ;;
+    *) finish_run internal_error testing stage_failed 'Could not run the UART test' ;;
+esac
+if jq -e '.summary.failed == 0' "$comparison" >/dev/null; then
+    finish_run passed finalizing '' ''
+fi
+finish_run mismatch finalizing '' ''

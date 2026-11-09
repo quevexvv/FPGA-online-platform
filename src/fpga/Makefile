@@ -18,7 +18,7 @@ syntax:
 	@for file in $(SHELL_FILES); do bash -n "$$file" || exit; done
 	@jq empty config/integration.example.json
 
-test: all
+test: all build/test-uart-peer
 	@$(MAKE) --no-print-directory test-serial
 	@$(MAKE) --no-print-directory test-session
 	@bash tests/scaffold.sh
@@ -49,6 +49,10 @@ build/fpga-uart: src/uart/session.c src/uart/serial.c src/uart/serial.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) src/uart/session.c src/uart/serial.c -o $@
 
 build/test-session: tests/session.c
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@
+
+build/test-uart-peer: tests/uart-peer.c
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@
 

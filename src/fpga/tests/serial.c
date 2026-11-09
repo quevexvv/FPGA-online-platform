@@ -2,6 +2,7 @@
 #include "../src/uart/serial.h"
 #include <assert.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,13 +28,20 @@ int main(void)
     assert(cfgetispeed(&tty) == B115200 && cfgetospeed(&tty) == B115200);
     assert((tty.c_cflag & CSIZE) == CS8);
     assert(!(tty.c_cflag & (PARENB | CSTOPB)) && tty.c_iflag == 0 && tty.c_lflag == 0);
+    assert(write(master, "1D00000\n", 8) == 8);
+    struct pollfd stale = {fd, POLLIN, 0};
+    assert(poll(&stale, 1, 500) == 1 && (stale.revents & POLLIN));
+    int fresh = serial_open(ptsname(master));
+    assert(fresh >= 0);
+    char data[8];
+    assert(serial_transfer(fresh, data, 1, 0, serial_deadline(30)) == SERIAL_TIMEOUT);
+    close(fresh);
     struct sigaction action = {0};
     action.sa_handler = tick;
     sigemptyset(&action.sa_mask);
     assert(sigaction(SIGALRM, &action, NULL) == 0);
     struct itimerval timer = {{0, 1000}, {0, 1000}};
     assert(setitimer(ITIMER_REAL, &timer, NULL) == 0);
-    char data[8];
     pid_t child = fork();
     assert(child >= 0);
     if (!child) {
