@@ -4,14 +4,106 @@ set -euo pipefail
 if [[ $# -eq 1 && $1 == --help ]]; then
     cat <<'HELP'
 Usage: fpga-run --help
-Планируемый внутренний интерфейс:
-  fpga-run --job <path> --output <path> --mode hardware|mock
+Внутренний интерфейс:
+  fpga-run --job <input> --output <output> --mode hardware|mock
 
-Каркас: исполнитель ещё не реализован.
 Бэкенд должен вызывать fpga-dispatch, а не fpga-run.
 HELP
     exit 0
 fi
 
-printf '%s\n' 'fpga-run: исполнитель ещё не реализован; см. --help.' >&2
-exit 2
+fail() {
+    printf 'fpga-run: %s\n' "$2" >&2
+    exit "$1"
+}
+
+safe_dir() { [[ -d $1 && ! -L $1 ]]; }
+safe_file() { [[ -f $1 && ! -L $1 ]]; }
+
+[[ $# -eq 6 && $1 == --job && $3 == --output && $5 == --mode &&
+    ( $6 == hardware || $6 == mock ) ]] || fail 2 'expected --job, --output and --mode'
+mode=$6
+id=${2%/input}
+id=${id##*/}
+[[ $id =~ ^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$ ]] || fail 2 'invalid run_id'
+[[ -n ${FPGA_JOBS_ROOT:-} && $FPGA_JOBS_ROOT == /* && -d $FPGA_JOBS_ROOT ]] ||
+    fail 1 'FPGA_JOBS_ROOT must be an existing absolute directory'
+root=$(cd -- "$FPGA_JOBS_ROOT" && pwd -P)
+[[ $root != / ]] || fail 1 'FPGA_JOBS_ROOT must be dedicated to jobs'
+umask 077
+runs=$root/runs
+run=$runs/$id
+output=$run/output
+control=$run/control
+work=$run/work
+id_lock_path=$runs/.locks/$id
+[[ $2 == "$run/input" && $4 == "$output" ]] || fail 2 'paths must belong to the registered run'
+for directory in "$runs" "$runs/.locks" "$run" "$run/input" "$work" "$output" "$output/logs" "$control"; do
+    safe_dir "$directory" || fail 2 'run directories are missing or unsafe'
+done
+safe_file "$id_lock_path" || fail 2 'run_id is not registered'
+exec {id_lock}>> "$id_lock_path"
+flock -x "$id_lock"
+
+if ! safe_file "$control/registration.json" || ! safe_file "$output/status.json"; then
+    fail 2 'registration is missing or unsafe'
+fi
+jq -es --arg id "$id" --arg mode "$mode" '
+    . == [{schema_version:1,run_id:$id,mode:$mode}]
+' "$control/registration.json" >/dev/null || fail 2 'registration does not match run_id and mode'
+jq -es --arg id "$id" --arg mode "$mode" '
+    length == 1 and (.[0] | .schema_version == 1 and .run_id == $id and .mode == $mode and
+                     .state == "starting" and .stage == "dispatch")
+' "$output/status.json" >/dev/null || fail 2 'run is not waiting to start'
+[[ ! -e $output/result.json && ! -L $output/result.json ]] || fail 2 'run already has a result'
+mkdir -- "$control/started" 2>/dev/null || fail 2 'run cannot be started again'
+# Release the ID lock so status can be read while the stand is busy.
+exec {id_lock}>&-
+
+timestamp() { date -u '+%Y-%m-%dT%H:%M:%SZ'; }
+
+write_json() {
+    local destination=$1 temporary
+    shift
+    temporary=$(mktemp -- "$output/.json.XXXXXXXX")
+    if ! jq -cn "$@" > "$temporary" || ! mv -T -- "$temporary" "$destination"; then
+        rm -f -- "$temporary"
+        fail 1 'cannot publish run JSON'
+    fi
+}
+
+started_at=
+finish_run() {
+    local result=$1 stage=$2 code=$3 message=$4 log=${5:-} now
+    now=$(timestamp)
+    # shellcheck disable=SC2016
+    write_json "$output/result.json" --arg id "$id" --arg mode "$mode" --arg result "$result" \
+        --arg started "$started_at" --arg now "$now" --arg stage "$stage" --arg code "$code" \
+        --arg message "$message" --arg log "$log" '
+        {schema_version:1,run_id:$id,mode:$mode,status:$result,hardware_verified:false,
+         started_at:($started | select(length>0) // null),finished_at:$now,
+         summary:{planned:0,executed:0,passed:0,failed:0},observations:[],
+         error:{stage:$stage,code:$code,message:$message},logs:[$log | select(length>0)]}'
+    # shellcheck disable=SC2016
+    write_json "$output/status.json" --arg id "$id" --arg mode "$mode" --arg result "$result" \
+        --arg started "$started_at" --arg now "$now" '
+        {schema_version:1,run_id:$id,mode:$mode,state:"finished",stage:"finalizing",
+         started_at:($started | select(length>0) // null),updated_at:$now,finished_at:$now,
+         result_status:$result}'
+    exit 0
+}
+
+stand_lock_path=$runs/.stand.lock
+if [[ -L $stand_lock_path || ( -e $stand_lock_path && ! -f $stand_lock_path ) ]]; then
+    finish_run internal_error locking stand_lock_error 'Stand lock path is unsafe'
+fi
+exec {stand_lock}>> "$stand_lock_path"
+lock_result=0
+flock -n -E 75 "$stand_lock" || lock_result=$?
+case "$lock_result" in
+    0) ;;
+    75) finish_run busy locking stand_busy 'Stand is already in use' ;;
+    *) finish_run internal_error locking stand_lock_error 'Cannot lock the stand' ;;
+esac
+
+finish_run internal_error finalizing stage_unavailable 'Execution stages are not available yet'

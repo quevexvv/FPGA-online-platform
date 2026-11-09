@@ -23,6 +23,7 @@ test: all
 	@$(MAKE) --no-print-directory test-session
 	@bash tests/scaffold.sh
 	@bash tests/dispatch.sh
+	@bash tests/runner.sh
 	@bash tests/contract.sh
 	@bash tests/analyst-contract.sh
 	@bash tests/prepare-job.sh
