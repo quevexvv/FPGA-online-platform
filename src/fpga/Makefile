@@ -90,7 +90,6 @@ test-wrapper:
 	$(VVP) build/tb_wrapper_combinational
 
 .PHONY: test-hardware
-test-hardware: export UART_PORT
 test-hardware: build/fpga-uart
 	@bash tests/step-hardware.sh "$${UART_PORT:-}"
 
