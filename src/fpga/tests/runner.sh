@@ -116,7 +116,7 @@ config() {
         --argjson timeout "$1" --arg port "${2:-/dev/null}" '
         {quartus_sh:$executable,quartus_pgm:$programmer,jtag_cable:"USB-Blaster [test]",
          jtag_device_index:1,uart_device:$port,build_timeout_ms:$timeout,program_timeout_ms:2000,
-         uart_ready_timeout_ms:300,uart_timeout_ms:100,max_log_bytes:2048}
+         uart_ready_timeout_ms:300,uart_timeout_ms:100,test_timeout_ms:2000,max_log_bytes:2048}
     ' > "$FPGA_RUN_CONFIG"
 }
 prepare_build() {
@@ -209,3 +209,22 @@ check_result "$id" board_error
 check_code "$id" uart_not_ready
 [[ -f $runs/$id/output/logs/uart.log ]]
 echo 'PASS: programmer arguments, programming failure and absent UART'
+
+prepare_build 20 ok
+printf '%s\n' '[{"vector_index":0,"reset_before":true,"din":"0x400","steps":0,
+                    "expected_dout":"0x00000","mask":"0x3ffff"}]' > "$runs/$id/work/test-set.json"
+run "$id" hardware
+check_result "$id" internal_error
+check_code "$id" test_set_invalid
+[[ ! -e $runs/$id/output/logs/build.log ]]
+
+vectors=examples/lab2/lab2_running_led.json
+jq -ecn --slurpfile vectors "$vectors" \
+    --arg replies $'K\nK\nK\nD 0x00001\nK\nK\nD 0x00008\nK\n' \
+    -f scripts/observations.jq |
+    jq -e '.complete == false and [.observations[].dout] == ["0x00001","0x00008"]' >/dev/null
+jq -ecn --slurpfile vectors "$vectors" \
+    --arg replies $'K\nK\nK\nD 0x00001\nK\nK\nD 0x00008\nK\nK\nD 0x00004\n' \
+    -f scripts/observations.jq |
+    jq -e '.complete == true and [.observations[].steps] == [0,3,1]' >/dev/null
+echo 'PASS: vector widths and complete or partial UART observations'

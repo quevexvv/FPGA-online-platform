@@ -127,10 +127,10 @@ settings=$(jq -ers '
     select((.quartus_sh | path) and (.quartus_pgm | path) and (.uart_device | path) and
            (.jtag_cable | text) and (.jtag_device_index | limit) and
            (.build_timeout_ms | limit) and (.max_log_bytes | limit) and
-           (.program_timeout_ms | limit) and (.uart_ready_timeout_ms | limit) and
+           (.program_timeout_ms | limit) and (.uart_ready_timeout_ms | limit) and (.test_timeout_ms | limit) and
            (.uart_timeout_ms | limit and . <= 60000)) |
     .quartus_sh, .quartus_pgm, .jtag_cable, .jtag_device_index, .uart_device,
-    .build_timeout_ms, .program_timeout_ms, .uart_ready_timeout_ms, .uart_timeout_ms, .max_log_bytes
+    .build_timeout_ms, .program_timeout_ms, .uart_ready_timeout_ms, .uart_timeout_ms, .test_timeout_ms, .max_log_bytes
 ' "$config") || finish_run internal_error validating config_invalid 'Stand tools or stage limits are invalid'
 {
     IFS= read -r quartus
@@ -142,6 +142,7 @@ settings=$(jq -ers '
     IFS= read -r program_timeout
     IFS= read -r uart_ready_timeout
     IFS= read -r uart_timeout
+    IFS= read -r test_timeout
     IFS= read -r max_log
 } <<< "$settings"
 for tool in "$quartus" "$programmer"; do
@@ -151,6 +152,20 @@ done
 project=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 [[ -x $project/build/fpga-stage && -x $project/build/fpga-uart ]] ||
     finish_run internal_error validating stage_missing 'Build the host tools with make all'
+
+vectors=$work/test-set.json
+if ! safe_file "$vectors" || ! jq -es -f "$project/scripts/test-set.jq" "$vectors" >/dev/null; then
+    finish_run internal_error validating test_set_invalid 'Prepared test set is missing or invalid'
+fi
+plan=$(jq -r '.[] | [.reset_before, .din, .steps] | @tsv' "$vectors")
+commands=$work/uart-commands
+(
+    set -o noclobber
+    while IFS=$'\t' read -r reset din steps; do
+        if [[ $reset == true ]]; then printf '%s\n' reset; fi
+        printf 'input 0%s\nstep %04x\nread\n' "${din#0x}" "$steps"
+    done <<< "$plan" > "$commands"
+) || finish_run internal_error validating test_plan_failed 'Cannot prepare UART commands'
 
 quartus_dir=$work/quartus
 artifacts=$quartus_dir/output_files
@@ -230,4 +245,19 @@ case "$stage_result" in
     129|130|143) finish_run internal_error programming interrupted 'UART readiness check was interrupted' ;;
     *) finish_run internal_error programming stage_failed 'Could not run the UART readiness check' ;;
 esac
-finish_run internal_error testing testing_unavailable 'The board is ready; vector execution is not available yet'
+publish_stage testing
+replies=$work/uart-replies
+run_stage "$test_timeout" logs/test.log bash "$project/scripts/uart-job.sh" \
+    "$project/build/fpga-uart" "$uart_device" "$uart_timeout" vectors "$commands" "$replies"
+report=$work/observations.json
+if ! safe_file "$replies"; then replies=/dev/null; fi
+jq -cn --slurpfile vectors "$vectors" --rawfile replies "$replies" \
+    -f "$project/scripts/observations.jq" > "$report"
+case "$stage_result" in
+    0) jq -e '.complete' "$report" >/dev/null ||
+           finish_run board_error testing incomplete_observations 'UART did not return all observations' ;;
+    1|124) finish_run board_error testing uart_test_failed 'UART test ended before all vectors completed' ;;
+    129|130|143) finish_run internal_error testing interrupted 'UART testing was interrupted' ;;
+    *) finish_run internal_error testing stage_failed 'Could not run the UART test' ;;
+esac
+finish_run internal_error finalizing comparison_unavailable 'Observations are ready; comparison is not available yet'

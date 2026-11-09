@@ -9,5 +9,6 @@
   "program_timeout_ms": null,
   "uart_ready_timeout_ms": null,
   "uart_timeout_ms": null,
+  "test_timeout_ms": null,
   "max_log_bytes": null
 }

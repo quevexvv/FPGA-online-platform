@@ -16,5 +16,8 @@ case "$4" in
         # from the current protocol without advancing the student clock.
         printf '%s\n' read 'step 0000' read | "$uart" "$port" "$timeout"
         ;;
+    vectors)
+        "$uart" "$port" "$timeout" < "$5" | tee -- "$6"
+        ;;
     *) exit 2 ;;
 esac

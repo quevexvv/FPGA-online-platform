@@ -25,14 +25,7 @@ test_set=$(jq -r '.test_set' <<< "$manifest")
 kind=$(jq -r '.kind' <<< "$manifest")
 vectors=$project/testsets/$test_set.json
 [[ -f $vectors && ! -L $vectors ]] || invalid 'unknown test set'
-if ! jq -es '
-    length == 1 and (.[0] | type == "array" and length > 0 and
-    all(to_entries[]; .key == .value.vector_index and (.value |
-        (.reset_before | type == "boolean") and
-        (.din | type == "string" and test("\\A0x[0-3][0-9a-f]{2}\\z")) and
-        (.steps | type == "number" and . == floor and . >= 0 and . <= 65535) and
-        all(.expected_dout, .mask; type == "string" and test("\\A0x[0-3][0-9a-f]{4}\\z")))))
-' "$vectors" >/dev/null; then
+if ! jq -es -f "$project/scripts/test-set.jq" "$vectors" >/dev/null; then
     echo 'prepare-job: installed test set is malformed' >&2
     exit 1
 fi
