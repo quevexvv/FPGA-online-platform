@@ -12,7 +12,7 @@ VVP ?= vvp
 .PHONY: all test lint syntax
 all: syntax build/test-serial build/fpga-uart
 	@test -x bin/fpga-dispatch && test -x bin/fpga-run
-	@echo 'Host checks built; dispatcher pipeline is not implemented.'
+	@echo 'Host checks built; the dispatcher supports job registration.'
 
 syntax:
 	@for file in $(SHELL_FILES); do bash -n "$$file" || exit; done
@@ -22,9 +22,10 @@ test: all
 	@$(MAKE) --no-print-directory test-serial
 	@$(MAKE) --no-print-directory test-session
 	@bash tests/scaffold.sh
-	@bash tests/pipeline-placeholder.sh
+	@bash tests/dispatch.sh
 	@bash tests/contract.sh
 	@bash tests/analyst-contract.sh
+	@bash tests/prepare-job.sh
 	@$(MAKE) --no-print-directory test-protocol
 
 lint: syntax
@@ -87,6 +88,10 @@ test-wrapper:
 	$(VVP) build/tb_wrapper_counter
 	$(IVERILOG) -g2001 -Wall -s tb_fpga_wrapper -Ptb_fpga_wrapper.COMBINATIONAL=1 -o build/tb_wrapper_combinational tests/tb_fpga_wrapper.v $(WRAPPER_HDL) examples/combinational/student_top.v
 	$(VVP) build/tb_wrapper_combinational
+
+.PHONY: test-hardware
+test-hardware: build/fpga-uart
+	@bash tests/step-hardware.sh "$${UART_PORT:-}"
 
 .PHONY: test-dut-control
 test-dut-control:

@@ -3,16 +3,127 @@ set -euo pipefail
 
 if [[ $# -eq 1 && $1 == --help ]]; then
     cat <<'HELP'
-Usage: fpga-dispatch --help
-Планируемый интерфейс:
-  fpga-dispatch submit --run-id <uuid> --mode hardware|mock
+Usage: fpga-dispatch submit --run-id <uuid> --mode hardware|mock
   fpga-dispatch status --run-id <uuid>
   fpga-dispatch cleanup --run-id <uuid>
 
-Каркас: команды ещё не реализованы; задания не запускаются.
+FPGA_JOBS_ROOT задаёт корень incoming и runs.
+Submit регистрирует задания; запуск и cleanup ещё не реализованы.
 HELP
     exit 0
 fi
 
-printf '%s\n' 'fpga-dispatch: команды ещё не реализованы; см. --help.' >&2
-exit 2
+fail() {
+    printf 'fpga-dispatch: %s\n' "$2" >&2
+    exit "$1"
+}
+
+exists() { [[ -e $1 || -L $1 ]]; }
+
+operation=${1:-}
+run_id=${3:-}
+mode=${5:-}
+case "$operation" in
+    submit)
+        [[ $# -eq 5 && $4 == --mode && ( $mode == hardware || $mode == mock ) ]] ||
+            fail 2 'expected submit --run-id <uuid> --mode hardware|mock'
+        ;;
+    status) [[ $# -eq 3 ]] || fail 2 'expected status --run-id <uuid>' ;;
+    cleanup) fail 2 'cleanup is not implemented' ;;
+    *) fail 2 'unknown command; see --help' ;;
+esac
+[[ $2 == --run-id && $run_id =~ ^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$ ]] ||
+    fail 2 'expected a lowercase UUID'
+
+[[ -n ${FPGA_JOBS_ROOT:-} && $FPGA_JOBS_ROOT == /* && -d $FPGA_JOBS_ROOT ]] ||
+    fail 1 'FPGA_JOBS_ROOT must be an existing absolute directory'
+root=$(cd -- "$FPGA_JOBS_ROOT" && pwd -P)
+[[ $root != / ]] || fail 1 'FPGA_JOBS_ROOT must be dedicated to jobs'
+umask 077
+incoming=$root/incoming
+runs=$root/runs
+locks=$runs/.locks
+[[ -d $incoming && ! -L $incoming && ! -L $runs ]] || fail 1 'unsafe job directories'
+mkdir -p -- "$runs"
+[[ ! -L $locks ]] || fail 1 'unsafe lock directory'
+mkdir -p -- "$locks"
+[[ ! -L $locks/$run_id && ( ! -e $locks/$run_id || -f $locks/$run_id ) ]] ||
+    fail 1 'unsafe lock file'
+exec {lock_fd}>> "$locks/$run_id"
+flock -x "$lock_fd"
+
+upload=$incoming/$run_id
+run=$runs/$run_id
+pending=$runs/.$run_id.pending
+ready=$pending/ready
+registered=false
+if exists "$run"; then
+    [[ -d $run && ! -L $run && -d $run/control && ! -L $run/control &&
+       -d $run/output && ! -L $run/output && -f $run/control/registration.json &&
+       ! -L $run/control/registration.json && -f $run/output/status.json &&
+       ! -L $run/output/status.json ]] || fail 1 'registration is incomplete or unsafe'
+    registered_mode=$(jq -er --arg id "$run_id" '
+        select(.schema_version == 1 and .run_id == $id and (.mode == "hardware" or .mode == "mock")) | .mode
+    ' "$run/control/registration.json") || fail 1 'registration is invalid'
+    registered=true
+fi
+
+if [[ $operation == status ]]; then
+    [[ $registered == true ]] || fail 2 'run_id is not registered'
+    cat -- "$run/output/status.json"
+    exit
+fi
+
+# Recover an interrupted submit under the same lock. A published directory
+# is authoritative. Before publication the original upload can be restored.
+recover_pending() {
+    if ! exists "$pending"; then return 0; fi
+    [[ -d $pending && ! -L $pending && ! -L $ready && ! -L $ready/input ]] || return 1
+    if [[ ! -d $run || -L $run ]] && exists "$pending/upload"; then
+        if exists "$upload"; then return 1; fi
+        mv -T -- "$pending/upload" "$upload" || return 1
+    fi
+    if [[ -d $ready/input ]]; then chmod -R u+w -- "$ready/input" || return 1; fi
+    if [[ -d $pending/upload && ! -L $pending/upload ]]; then
+        find -P "$pending/upload" -xdev -type d -exec chmod u+w -- {} + || return 1
+    fi
+    rm -rf --one-file-system -- "$pending"
+}
+recover_pending || fail 1 'pending registration requires recovery'
+
+response() {
+    jq -cn --arg id "$run_id" --arg disposition "$1" \
+        '{schema_version:1,run_id:$id,disposition:$disposition}'
+}
+if [[ $registered == true ]]; then
+    [[ $mode == "$registered_mode" ]] || fail 2 'run_id is already registered with another mode'
+    if exists "$upload"; then fail 2 'cannot replace input for a registered run_id'; fi
+    response existing
+    exit
+fi
+
+[[ -d $upload && ! -L $upload ]] || fail 2 'invalid_input: expected an upload directory'
+incoming_mount=$(stat -c %m -- "$upload")
+runs_mount=$(stat -c %m -- "$runs")
+[[ $incoming_mount == "$runs_mount" ]] || fail 1 'incoming and runs must share a filesystem'
+project=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+mkdir -- "$pending"
+trap 'recover_pending || fail 1 "pending registration requires recovery"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+mv -T -- "$upload" "$pending/upload"
+mkdir -p -- "$ready/work" "$ready/output/logs" "$ready/control"
+bash "$project/scripts/prepare-job.sh" "$pending/upload" "$ready/work" "$run_id"
+cp -R -- "$pending/upload" "$ready/input"
+chmod -R u+rX,a-w,go-rwx -- "$ready/input"
+jq -cn --arg id "$run_id" --arg mode "$mode" \
+    '{schema_version:1,run_id:$id,mode:$mode}' > "$ready/control/registration.json"
+jq -cn --arg id "$run_id" --arg mode "$mode" --arg now "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+    '{schema_version:1,run_id:$id,mode:$mode,state:"starting",stage:"dispatch",
+      started_at:null,updated_at:$now,finished_at:null,result_status:null}' > "$ready/output/status.json"
+
+mv -T -- "$ready" "$run"
+trap - EXIT
+recover_pending || fail 1 'pending registration requires recovery'
+response accepted

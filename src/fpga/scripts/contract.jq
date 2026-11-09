@@ -5,17 +5,19 @@ def uuid: type == "string" and test("^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$
 def utc: type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$");
 def maybe_time: . == null or utc;
 def natural: type == "number" and . >= 0 and floor == .;
-def relative: type == "string" and test("^[A-Za-z0-9_-][A-Za-z0-9_./-]*$")
+def relative: type == "string" and test("\\A[A-Za-z0-9_-][A-Za-z0-9_./-]*\\z")
   and (split("/") | all(. != ".." and . != "." and . != ""));
 def final_status: member(["passed","mismatch","build_error","board_error","invalid_input","busy","internal_error"]);
 def stage: member(["dispatch","validating","locking","building","programming","testing","finalizing"]);
 def common: required(["schema_version","run_id"]) and .schema_version == 1 and (.run_id | uuid);
 def mode: .mode | member(["hardware","mock"]);
 def manifest:
-  required(["top","kind","sources","test_set"]) and .top == "student_top"
+  keys == ["kind","run_id","schema_version","sources","test_set","top"] and .top == "student_top"
+  and ($ARGS.named.run_id == null or .run_id == $ARGS.named.run_id)
   and (.kind | member(["combinational","sequential"]))
-  and (.sources | type == "array" and length > 0 and all(.[]; relative and endswith(".v")))
-  and (.test_set | type == "string" and test("^[A-Za-z0-9_-]+$"));
+  and (.sources | type == "array" and length > 0 and length == (unique | length)
+       and all(.[]; relative and endswith(".v")))
+  and (.test_set | type == "string" and test("\\A[A-Za-z0-9_-]+\\z"));
 def status:
   required(["mode","state","stage","started_at","updated_at","finished_at","result_status"])
   and mode and (.stage | stage) and (.updated_at | utc) and (.started_at | maybe_time)
