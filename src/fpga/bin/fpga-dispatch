@@ -8,7 +8,8 @@ Usage: fpga-dispatch submit --run-id <uuid> --mode hardware|mock
   fpga-dispatch cleanup --run-id <uuid>
 
 FPGA_JOBS_ROOT задаёт корень incoming и runs.
-Submit регистрирует задания. Автоматический запуск и cleanup ещё не подключены.
+Submit регистрирует задания и запускает пользовательский сервис systemd.
+FPGA_DISPATCH_LAUNCH=manual оставляет запуск оператору. Cleanup пока недоступен.
 HELP
     exit 0
 fi
@@ -27,6 +28,9 @@ case "$operation" in
     submit)
         [[ $# -eq 5 && $4 == --mode && ( $mode == hardware || $mode == mock ) ]] ||
             fail 2 'expected submit --run-id <uuid> --mode hardware|mock'
+        launch=${FPGA_DISPATCH_LAUNCH:-systemd}
+        [[ $launch == systemd || $launch == manual ]] ||
+            fail 1 'FPGA_DISPATCH_LAUNCH must be systemd or manual'
         ;;
     status) [[ $# -eq 3 ]] || fail 2 'expected status --run-id <uuid>' ;;
     cleanup) fail 2 'cleanup is not implemented' ;;
@@ -126,4 +130,19 @@ publish_run_status "$ready/output" "$run_id" "$mode" '' starting dispatch
 mv -T -- "$ready" "$run"
 trap - EXIT
 recover_pending || fail 1 'pending registration requires recovery'
+if [[ $launch == systemd ]]; then
+    # The dispatcher keeps the ID lock until launch succeeds or the failure is published.
+    if ! (
+        exec {lock_fd}>&-
+        exec systemd-run --user --quiet --collect --no-ask-password --expand-environment=no \
+            --unit="fpga-run-$run_id" --service-type=exec \
+            --property=Restart=no --property=StandardInput=null \
+            --property=StandardOutput=journal --property=StandardError=journal \
+            --setenv="FPGA_JOBS_ROOT=$root" --setenv="FPGA_RUN_CONFIG=${FPGA_RUN_CONFIG:-}" \
+            -- "$project/bin/fpga-run" --job "$run/input" --output "$run/output" --mode "$mode"
+    ) >&2; then
+        publish_run_result "$run/output" "$run_id" "$mode" '' internal_error dispatch \
+            service_start_failed 'Cannot start the FPGA user service'
+    fi
+fi
 response accepted

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd -- "$(dirname -- "$0")/.."
+export FPGA_DISPATCH_LAUNCH=manual
 
 root=$(mktemp -d)
 active=
