@@ -24,6 +24,8 @@ test: all build/test-uart-peer
 	@bash tests/scaffold.sh
 	@bash tests/dispatch.sh
 	@bash tests/runner.sh
+	@bash tests/mock.sh
+	@bash tests/launch.sh
 	@bash tests/stage.sh
 	@bash tests/contract.sh
 	@bash tests/analyst-contract.sh

@@ -60,45 +60,15 @@ mkdir -- "$control/started" 2>/dev/null || fail 2 'run cannot be started again'
 # Release the ID lock so status can be read while the stand is busy.
 exec {id_lock}>&-
 
-timestamp() { date -u '+%Y-%m-%dT%H:%M:%SZ'; }
-
-write_json() {
-    local destination=$1 temporary
-    shift
-    temporary=$(mktemp -- "$output/.json.XXXXXXXX")
-    if ! jq -cn "$@" > "$temporary" || ! mv -T -- "$temporary" "$destination"; then
-        rm -f -- "$temporary"
-        fail 1 'cannot publish run JSON'
-    fi
-}
+project=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+# shellcheck source=scripts/run-state.sh
+source "$project/scripts/run-state.sh"
 
 started_at=
 planned=0
 comparison=/dev/null
 finish_run() {
-    local result=$1 stage=$2 code=$3 message=$4 now log logs
-    local log_files=()
-    now=$(timestamp)
-    for log in logs/{build,program,uart,test}.log; do
-        if safe_file "$output/$log"; then log_files+=("$log"); fi
-    done
-    logs=$(jq -cn --args '$ARGS.positional' "${log_files[@]}")
-    # shellcheck disable=SC2016
-    write_json "$output/result.json" --arg id "$id" --arg mode "$mode" --arg result "$result" \
-        --arg started "$started_at" --arg now "$now" --arg stage "$stage" --arg code "$code" \
-        --arg message "$message" --argjson logs "$logs" --argjson planned "$planned" \
-        --slurpfile comparison "$comparison" '
-        {schema_version:1,run_id:$id,mode:$mode,status:$result,
-         hardware_verified:($mode == "hardware" and ($result == "passed" or $result == "mismatch")),
-         started_at:($started | select(length>0) // null),finished_at:$now,
-         error:(if $code == "" then null else {stage:$stage,code:$code,message:$message} end),logs:$logs}
-        + ($comparison[0] // {summary:{planned:$planned,executed:0,passed:0,failed:0},observations:[]})'
-    # shellcheck disable=SC2016
-    write_json "$output/status.json" --arg id "$id" --arg mode "$mode" --arg result "$result" \
-        --arg started "$started_at" --arg now "$now" '
-        {schema_version:1,run_id:$id,mode:$mode,state:"finished",stage:"finalizing",
-         started_at:($started | select(length>0) // null),updated_at:$now,finished_at:$now,
-         result_status:$result}'
+    publish_run_result "$output" "$id" "$mode" "$started_at" "$1" "$2" "$3" "$4" "$planned" "$comparison"
     exit 0
 }
 
@@ -106,7 +76,9 @@ stand_lock_path=$runs/.stand.lock
 if [[ -L $stand_lock_path || ( -e $stand_lock_path && ! -f $stand_lock_path ) ]]; then
     finish_run internal_error locking stand_lock_error 'Stand lock path is unsafe'
 fi
-exec {stand_lock}>> "$stand_lock_path"
+if ! exec {stand_lock}>> "$stand_lock_path"; then
+    finish_run internal_error locking stand_lock_error 'Cannot open the stand lock'
+fi
 lock_result=0
 flock -n -E 75 "$stand_lock" || lock_result=$?
 case "$lock_result" in
@@ -115,8 +87,50 @@ case "$lock_result" in
     *) finish_run internal_error locking stand_lock_error 'Cannot lock the stand' ;;
 esac
 
+vectors=$work/test-set.json
+if ! safe_file "$vectors" || ! jq -es -f "$project/scripts/test-set.jq" "$vectors" >/dev/null; then
+    finish_run internal_error validating test_set_invalid 'Prepared test set is missing or invalid'
+fi
+planned=$(jq 'length' "$vectors")
+
+publish_stage() {
+    publish_run_status "$output" "$id" "$mode" "$started_at" running "$1"
+}
+
+compare_observations() {
+    local report=$1
+    if ! jq -cn --slurpfile vectors "$vectors" --slurpfile report "$report" \
+        -f "$project/scripts/compare-vectors.jq" > "$work/comparison.json"; then
+        finish_run internal_error finalizing comparison_failed 'Cannot compare observations'
+    fi
+    comparison=$work/comparison.json
+}
+
+finish_comparison() {
+    if jq -e '.summary.failed == 0' "$comparison" >/dev/null; then
+        finish_run passed finalizing '' ''
+    fi
+    finish_run mismatch finalizing '' ''
+}
+
 if [[ $mode == mock ]]; then
-    finish_run internal_error validating mock_unavailable 'Mock execution is not available yet'
+    model=$(jq -er '.test_set' "$run/input/manifest.json") ||
+        finish_run invalid_input validating mock_model_invalid 'Cannot read the demo model'
+    case "$model" in
+        counter-v1|combinational-v1|mock-uart-error-v1) ;;
+        *) finish_run invalid_input validating mock_model_invalid 'Unknown demo model' ;;
+    esac
+    started_at=$(timestamp)
+    publish_stage testing
+    if [[ $model == mock-uart-error-v1 ]]; then
+        finish_run board_error testing mock_uart_timeout 'Simulated UART timeout'
+    fi
+    report=$work/observations.json
+    jq -cn --arg model "$model" --slurpfile vectors "$vectors" \
+        -f "$project/scripts/mock-vectors.jq" > "$report" ||
+        finish_run internal_error testing mock_failed 'Cannot calculate demo observations'
+    compare_observations "$report"
+    finish_comparison
 fi
 
 config=${FPGA_RUN_CONFIG:-}
@@ -153,15 +167,9 @@ for tool in "$quartus" "$programmer"; do
     [[ -f $tool && -x $tool ]] ||
         finish_run internal_error validating config_invalid 'Configured Quartus executable is missing'
 done
-project=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 [[ -x $project/build/fpga-stage && -x $project/build/fpga-uart ]] ||
     finish_run internal_error validating stage_missing 'Build the host tools with make all'
 
-vectors=$work/test-set.json
-if ! safe_file "$vectors" || ! jq -es -f "$project/scripts/test-set.jq" "$vectors" >/dev/null; then
-    finish_run internal_error validating test_set_invalid 'Prepared test set is missing or invalid'
-fi
-planned=$(jq 'length' "$vectors")
 plan=$(jq -r '.[] | [.reset_before, .din, .steps] | @tsv' "$vectors")
 commands=$work/uart-commands
 (
@@ -184,15 +192,6 @@ if [[ -e $artifacts || -L $artifacts ]]; then
 fi
 mkdir -- "$work/home" "$work/tmp" ||
     finish_run internal_error building workspace_error 'Cannot create private Quartus directories'
-
-publish_stage() {
-    local stage=$1
-    # shellcheck disable=SC2016
-    write_json "$output/status.json" --arg id "$id" --arg mode "$mode" --arg started "$started_at" \
-        --arg stage "$stage" --arg now "$(timestamp)" '
-        {schema_version:1,run_id:$id,mode:$mode,state:"running",stage:$stage,
-         started_at:$started,updated_at:$now,finished_at:null,result_status:null}'
-}
 
 run_stage() {
     local timeout=$1 log=$2 stage_pid
@@ -257,12 +256,9 @@ run_stage "$test_timeout" logs/test.log bash "$project/scripts/uart-job.sh" \
 report=$work/observations.json
 if ! safe_file "$replies"; then replies=/dev/null; fi
 jq -cn --slurpfile vectors "$vectors" --rawfile replies "$replies" \
-    -f "$project/scripts/observations.jq" > "$report"
-if ! jq -cn --slurpfile vectors "$vectors" --slurpfile report "$report" \
-    -f "$project/scripts/compare-vectors.jq" > "$work/comparison.json"; then
-    finish_run internal_error finalizing comparison_failed 'Cannot compare observations'
-fi
-comparison=$work/comparison.json
+    -f "$project/scripts/observations.jq" > "$report" ||
+    finish_run internal_error testing observation_read_failed 'Cannot read UART observations'
+compare_observations "$report"
 case "$stage_result" in
     0) jq -e '.complete' "$report" >/dev/null ||
            finish_run board_error testing incomplete_observations 'UART did not return all observations' ;;
@@ -270,7 +266,4 @@ case "$stage_result" in
     129|130|143) finish_run internal_error testing interrupted 'UART testing was interrupted' ;;
     *) finish_run internal_error testing stage_failed 'Could not run the UART test' ;;
 esac
-if jq -e '.summary.failed == 0' "$comparison" >/dev/null; then
-    finish_run passed finalizing '' ''
-fi
-finish_run mismatch finalizing '' ''
+finish_comparison

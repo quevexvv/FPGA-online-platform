@@ -8,7 +8,8 @@ Usage: fpga-dispatch submit --run-id <uuid> --mode hardware|mock
   fpga-dispatch cleanup --run-id <uuid>
 
 FPGA_JOBS_ROOT задаёт корень incoming и runs.
-Submit регистрирует задания. Автоматический запуск и cleanup ещё не подключены.
+Submit регистрирует задания и запускает пользовательский сервис systemd.
+FPGA_DISPATCH_LAUNCH=manual оставляет запуск оператору. Cleanup пока недоступен.
 HELP
     exit 0
 fi
@@ -27,6 +28,9 @@ case "$operation" in
     submit)
         [[ $# -eq 5 && $4 == --mode && ( $mode == hardware || $mode == mock ) ]] ||
             fail 2 'expected submit --run-id <uuid> --mode hardware|mock'
+        launch=${FPGA_DISPATCH_LAUNCH:-systemd}
+        [[ $launch == systemd || $launch == manual ]] ||
+            fail 1 'FPGA_DISPATCH_LAUNCH must be systemd or manual'
         ;;
     status) [[ $# -eq 3 ]] || fail 2 'expected status --run-id <uuid>' ;;
     cleanup) fail 2 'cleanup is not implemented' ;;
@@ -89,7 +93,9 @@ recover_pending() {
     fi
     rm -rf --one-file-system -- "$pending"
 }
-recover_pending || fail 1 'pending registration requires recovery'
+clean_published_upload() {
+    recover_pending || printf '%s\n' 'fpga-dispatch: pending upload cleanup failed' >&2
+}
 
 response() {
     jq -cn --arg id "$run_id" --arg disposition "$1" \
@@ -98,15 +104,19 @@ response() {
 if [[ $registered == true ]]; then
     [[ $mode == "$registered_mode" ]] || fail 2 'run_id is already registered with another mode'
     if exists "$upload"; then fail 2 'cannot replace input for a registered run_id'; fi
+    clean_published_upload
     response existing
     exit
 fi
+recover_pending || fail 1 'pending registration requires recovery'
 
 [[ -d $upload && ! -L $upload ]] || fail 2 'invalid_input: expected an upload directory'
 incoming_mount=$(stat -c %m -- "$upload")
 runs_mount=$(stat -c %m -- "$runs")
 [[ $incoming_mount == "$runs_mount" ]] || fail 1 'incoming and runs must share a filesystem'
 project=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+# shellcheck source=scripts/run-state.sh
+source "$project/scripts/run-state.sh"
 mkdir -- "$pending"
 trap 'recover_pending || fail 1 "pending registration requires recovery"' EXIT
 trap 'exit 130' INT
@@ -114,16 +124,29 @@ trap 'exit 143' TERM
 
 mv -T -- "$upload" "$pending/upload"
 mkdir -p -- "$ready/work" "$ready/output/logs" "$ready/control"
-bash "$project/scripts/prepare-job.sh" "$pending/upload" "$ready/work" "$run_id"
+bash "$project/scripts/prepare-job.sh" "$pending/upload" "$ready/work" "$run_id" "$mode"
 cp -R -- "$pending/upload" "$ready/input"
 chmod -R u+rX,a-w,go-rwx -- "$ready/input"
 jq -cn --arg id "$run_id" --arg mode "$mode" \
     '{schema_version:1,run_id:$id,mode:$mode}' > "$ready/control/registration.json"
-jq -cn --arg id "$run_id" --arg mode "$mode" --arg now "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
-    '{schema_version:1,run_id:$id,mode:$mode,state:"starting",stage:"dispatch",
-      started_at:null,updated_at:$now,finished_at:null,result_status:null}' > "$ready/output/status.json"
+publish_run_status "$ready/output" "$run_id" "$mode" '' starting dispatch
 
 mv -T -- "$ready" "$run"
 trap - EXIT
-recover_pending || fail 1 'pending registration requires recovery'
+if [[ $launch == systemd ]]; then
+    # The dispatcher keeps the ID lock until launch succeeds or the failure is published.
+    if ! (
+        exec {lock_fd}>&-
+        exec systemd-run --user --quiet --collect --no-ask-password --expand-environment=no \
+            --unit="fpga-run-$run_id" --service-type=exec \
+            --property=Restart=no --property=StandardInput=null \
+            --property=StandardOutput=journal --property=StandardError=journal \
+            --setenv="FPGA_JOBS_ROOT=$root" --setenv="FPGA_RUN_CONFIG=${FPGA_RUN_CONFIG:-}" \
+            -- "$project/bin/fpga-run" --job "$run/input" --output "$run/output" --mode "$mode"
+    ) >&2; then
+        publish_run_result "$run/output" "$run_id" "$mode" '' internal_error dispatch \
+            service_start_failed 'Cannot start the FPGA user service'
+    fi
+fi
+clean_published_upload
 response accepted
