@@ -5,6 +5,7 @@ project=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 input=$1
 work=$2
 run_id=$3
+mode=${4:-hardware}
 
 invalid() {
     printf 'invalid_input: %s\n' "$1" >&2
@@ -24,6 +25,13 @@ jq -e --arg kind manifest --arg run_id "$run_id" -f "$project/scripts/contract.j
 test_set=$(jq -r '.test_set' <<< "$manifest")
 kind=$(jq -r '.kind' <<< "$manifest")
 vectors=$project/testsets/$test_set.json
+if [[ $mode == mock ]]; then
+    case "$test_set:$kind" in
+        counter-v1:sequential|combinational-v1:combinational) ;;
+        mock-uart-error-v1:sequential) vectors=$project/testsets/counter-v1.json ;;
+        *) invalid 'unknown or incompatible mock model' ;;
+    esac
+fi
 [[ -f $vectors && ! -L $vectors ]] || invalid 'unknown test set'
 if ! jq -es -f "$project/scripts/test-set.jq" "$vectors" >/dev/null; then
     echo 'prepare-job: installed test set is malformed' >&2
@@ -47,6 +55,11 @@ for path in "${sources[@]}"; do
 done
 file_count=$(find -P "$input" -type f -printf x | wc -c)
 [[ $file_count -eq $((${#sources[@]} + 1)) ]] || invalid 'upload contains undeclared files'
+
+if [[ $mode == mock ]]; then
+    cp -- "$vectors" "$work/test-set.json"
+    exit 0
+fi
 
 wrapper=(fpga_wrapper dut_control clock_burst uart_service uart_commands uart_rx uart_tx)
 wrapper_files=()

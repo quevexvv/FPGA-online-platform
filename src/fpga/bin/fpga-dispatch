@@ -114,7 +114,7 @@ trap 'exit 143' TERM
 
 mv -T -- "$upload" "$pending/upload"
 mkdir -p -- "$ready/work" "$ready/output/logs" "$ready/control"
-bash "$project/scripts/prepare-job.sh" "$pending/upload" "$ready/work" "$run_id"
+bash "$project/scripts/prepare-job.sh" "$pending/upload" "$ready/work" "$run_id" "$mode"
 cp -R -- "$pending/upload" "$ready/input"
 chmod -R u+rX,a-w,go-rwx -- "$ready/input"
 jq -cn --arg id "$run_id" --arg mode "$mode" \
