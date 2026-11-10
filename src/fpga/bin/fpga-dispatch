@@ -107,6 +107,8 @@ incoming_mount=$(stat -c %m -- "$upload")
 runs_mount=$(stat -c %m -- "$runs")
 [[ $incoming_mount == "$runs_mount" ]] || fail 1 'incoming and runs must share a filesystem'
 project=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+# shellcheck source=scripts/run-state.sh
+source "$project/scripts/run-state.sh"
 mkdir -- "$pending"
 trap 'recover_pending || fail 1 "pending registration requires recovery"' EXIT
 trap 'exit 130' INT
@@ -119,9 +121,7 @@ cp -R -- "$pending/upload" "$ready/input"
 chmod -R u+rX,a-w,go-rwx -- "$ready/input"
 jq -cn --arg id "$run_id" --arg mode "$mode" \
     '{schema_version:1,run_id:$id,mode:$mode}' > "$ready/control/registration.json"
-jq -cn --arg id "$run_id" --arg mode "$mode" --arg now "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
-    '{schema_version:1,run_id:$id,mode:$mode,state:"starting",stage:"dispatch",
-      started_at:null,updated_at:$now,finished_at:null,result_status:null}' > "$ready/output/status.json"
+publish_run_status "$ready/output" "$run_id" "$mode" '' starting dispatch
 
 mv -T -- "$ready" "$run"
 trap - EXIT

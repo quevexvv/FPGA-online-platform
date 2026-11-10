@@ -53,4 +53,40 @@ upload 4 unknown sequential
 code=0
 submit mock >/dev/null 2>&1 || code=$?
 [[ $code == 2 && ! -e $job ]]
+
+upload 5 counter-v1 sequential
+submit mock >/dev/null
+mkdir -- "$FPGA_JOBS_ROOT/bin"
+REAL_MV=$(command -v mv)
+export REAL_MV
+cat > "$FPGA_JOBS_ROOT/bin/mv" <<'GATE'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ ${!#} == */status.json ]] && jq -e '.state == "finished"' "${@: -2:1}" >/dev/null; then
+    touch -- "$FPGA_JOBS_ROOT/before-finished"
+    for _ in {1..200}; do
+        [[ ! -f $FPGA_JOBS_ROOT/release-finished ]] || break
+        sleep .01
+    done
+    [[ -f $FPGA_JOBS_ROOT/release-finished ]]
+fi
+exec "$REAL_MV" "$@"
+GATE
+chmod +x -- "$FPGA_JOBS_ROOT/bin/mv"
+PATH="$FPGA_JOBS_ROOT/bin:$PATH" run &
+worker=$!
+for _ in {1..100}; do
+    bin/fpga-dispatch status --run-id "$id" |
+        jq -e --arg kind status -f scripts/contract.jq >/dev/null
+    [[ ! -f $FPGA_JOBS_ROOT/before-finished ]] || break
+    sleep .01
+done
+[[ -f $FPGA_JOBS_ROOT/before-finished ]]
+jq -e '.state == "running" and .mode == "mock"' "$job/output/status.json" >/dev/null
+check passed
+touch -- "$FPGA_JOBS_ROOT/release-finished"
+wait "$worker"
+jq -e '.state == "finished" and .result_status == "passed" and .mode == "mock"' \
+    "$job/output/status.json" >/dev/null
+echo 'PASS: complete result is visible before finished status'
 echo 'PASS: explicit mock models, mismatch and simulated UART error'

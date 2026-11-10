@@ -80,7 +80,7 @@ REAL_JQ=$(command -v jq)
 REAL_MV=$(command -v mv)
 cat > "$root/fake/jq" <<'FAKE_JQ'
 #!/usr/bin/env bash
-[[ $* != *'state:"starting"'* ]] || exit 1
+[[ $* != *'--arg state starting'* ]] || exit 1
 exec "$REAL_JQ" "$@"
 FAKE_JQ
 cat > "$root/fake/mv" <<'FAKE_MV'
