@@ -76,7 +76,9 @@ stand_lock_path=$runs/.stand.lock
 if [[ -L $stand_lock_path || ( -e $stand_lock_path && ! -f $stand_lock_path ) ]]; then
     finish_run internal_error locking stand_lock_error 'Stand lock path is unsafe'
 fi
-exec {stand_lock}>> "$stand_lock_path"
+if ! exec {stand_lock}>> "$stand_lock_path"; then
+    finish_run internal_error locking stand_lock_error 'Cannot open the stand lock'
+fi
 lock_result=0
 flock -n -E 75 "$stand_lock" || lock_result=$?
 case "$lock_result" in

@@ -38,6 +38,13 @@ fi
 ) </dev/null >"$job/manager.log" 2>&1 &
 MANAGER
 chmod +x -- "$root/bin/systemd-run"
+cat > "$root/bin/rm" <<'CLEANUP'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ ${FAIL_PENDING_CLEANUP:-0} == 1 && ${!#} == *.pending ]]; then exit 1; fi
+exec /usr/bin/rm "$@"
+CLEANUP
+chmod +x -- "$root/bin/rm"
 
 register_input() {
     id=aaaaaaaa-bbbb-cccc-dddd-00000000000$1
@@ -51,9 +58,11 @@ submit() { bin/fpga-dispatch submit --run-id "$id" --mode mock; }
 status() { bin/fpga-dispatch status --run-id "$id"; }
 
 register_input 1
-submit | jq -e '.disposition == "accepted"' >/dev/null
+FAIL_PENDING_CLEANUP=1 submit 2>"$root/cleanup-error" | jq -e '.disposition == "accepted"' >/dev/null
+grep -q 'pending upload cleanup failed' "$root/cleanup-error"
 status | jq -e '.state == "starting"' >/dev/null
-submit | jq -e '.disposition == "existing"' >/dev/null
+FAIL_PENDING_CLEANUP=1 submit 2>/dev/null | jq -e '.disposition == "existing"' >/dev/null
+[[ -d $FPGA_JOBS_ROOT/runs/.$id.pending/upload ]]
 [[ $(wc -l < "$FPGA_JOBS_ROOT/launches") == 1 ]]
 touch -- "$job/control/release"
 for _ in {1..100}; do
@@ -63,6 +72,8 @@ for _ in {1..100}; do
 done
 status | jq -e '.state == "finished" and .result_status == "passed"' >/dev/null
 jq -e '.mode == "mock" and .hardware_verified == false' "$job/output/result.json" >/dev/null
+submit | jq -e '.disposition == "existing"' >/dev/null
+[[ ! -e $FPGA_JOBS_ROOT/runs/.$id.pending ]]
 
 register_input 2
 MANAGER_DOWN=1 submit 2>"$root/launch-error" | jq -e '.disposition == "accepted"' >/dev/null

@@ -93,7 +93,9 @@ recover_pending() {
     fi
     rm -rf --one-file-system -- "$pending"
 }
-recover_pending || fail 1 'pending registration requires recovery'
+clean_published_upload() {
+    recover_pending || printf '%s\n' 'fpga-dispatch: pending upload cleanup failed' >&2
+}
 
 response() {
     jq -cn --arg id "$run_id" --arg disposition "$1" \
@@ -102,9 +104,11 @@ response() {
 if [[ $registered == true ]]; then
     [[ $mode == "$registered_mode" ]] || fail 2 'run_id is already registered with another mode'
     if exists "$upload"; then fail 2 'cannot replace input for a registered run_id'; fi
+    clean_published_upload
     response existing
     exit
 fi
+recover_pending || fail 1 'pending registration requires recovery'
 
 [[ -d $upload && ! -L $upload ]] || fail 2 'invalid_input: expected an upload directory'
 incoming_mount=$(stat -c %m -- "$upload")
@@ -129,7 +133,6 @@ publish_run_status "$ready/output" "$run_id" "$mode" '' starting dispatch
 
 mv -T -- "$ready" "$run"
 trap - EXIT
-recover_pending || fail 1 'pending registration requires recovery'
 if [[ $launch == systemd ]]; then
     # The dispatcher keeps the ID lock until launch succeeds or the failure is published.
     if ! (
@@ -145,4 +148,5 @@ if [[ $launch == systemd ]]; then
             service_start_failed 'Cannot start the FPGA user service'
     fi
 fi
+clean_published_upload
 response accepted
