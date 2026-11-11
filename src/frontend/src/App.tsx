@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { FluentProvider, makeStyles, tokens } from '@fluentui/react-components';
+import { Navigate, Route, Routes } from 'react-router';
 import { customLightTheme, customDarkTheme } from './theme/themes';
 import { AuthPage } from './pages/AuthPage';
 import { Header } from './components/Header';
@@ -8,7 +9,6 @@ import { WorkspacePage } from './pages/WorkspacePage';
 import { BookingPage } from './pages/BookingPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { LabTaskPage } from './pages/LabTaskPage';
-import { PageType, TabType } from './types';
 
 const useStyles = makeStyles({
   appContainer: {
@@ -25,10 +25,7 @@ export const App: React.FC = () => {
   const styles = useStyles();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [currentPage, setCurrentPage] = useState<PageType>('labs');
-
-// Страницы задания и кода открываются из лабораторных, поэтому в шапке активна эта вкладка
-  const currentTab: TabType = currentPage === 'lab-task' ? 'labs' : currentPage;
+  
 
   return (
     <FluentProvider theme={isDarkMode ? customDarkTheme : customLightTheme}>
@@ -38,19 +35,23 @@ export const App: React.FC = () => {
         <div className={styles.appContainer}>
           {/* Хэдер со всеми вкладками и кнопкой смены темы */}
           <Header
-            currentTab={currentTab}
-            onTabChange={setCurrentPage}
             isDarkMode={isDarkMode}
             onThemeToggle={() => setIsDarkMode(!isDarkMode)}
           />
 
           {/* Тело страниц */}
           <main style={{ flex: 1, overflow: 'hidden' }}>
-            {currentPage === 'labs' && <LabsPage onOpenTask={() => setCurrentPage('lab-task')} />}
-            {currentPage === 'workspace' && <WorkspacePage />}
-            {currentPage === 'booking' && <BookingPage />}
-            {currentPage === 'history' && <HistoryPage />}
-            {currentPage === 'lab-task' && <LabTaskPage />}
+            {/* Какую страницу показать, решает адрес в браузере */}
+            <Routes>
+              <Route path="/" element={<Navigate to="/labs" replace />} />
+              <Route path="/labs" element={<LabsPage />} />
+              <Route path="/labs/:labId" element={<LabTaskPage />} />
+              <Route path="/workspace" element={<WorkspacePage />} />
+              <Route path="/booking" element={<BookingPage />} />
+              <Route path="/history" element={<HistoryPage />} />
+              {/* Любой неизвестный адрес ведёт к списку лабораторных */}
+              <Route path="*" element={<Navigate to="/labs" replace />} />
+            </Routes>
           </main>
         </div>
       )}

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button, makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
 import { WeatherMoon24Regular, WeatherSunny24Regular } from '@fluentui/react-icons';
-import { TabType } from '../types';
+import { NavLink } from 'react-router';
 
 const useStyles = makeStyles({
   header: {
@@ -26,21 +26,19 @@ const useStyles = makeStyles({
     // auto забирает всё свободное место и отодвигает кнопку темы к правому краю
     marginRight: 'auto',
   },
-  navButton: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    fontFamily: 'inherit',
+  navLink: {
+    // Ссылка без подчёркивания, выглядит как вкладка
+    textDecoration: 'none',
     fontSize: '15px',
     fontWeight: '500',
     padding: '4px 0',
     transition: 'color 0.2s',
   },
-  navButtonActive: {
+  navLinkActive: {
     fontWeight: '700',
     color: tokens.colorBrandForeground1,
   },
-  navButtonInactive: {
+  navLinkInactive: {
     color: tokens.colorNeutralForeground2,
     ':hover': {
       color: tokens.colorNeutralForeground1,
@@ -55,25 +53,19 @@ const useStyles = makeStyles({
 });
 
 interface HeaderProps {
-  currentTab: TabType;
-  onTabChange: (tab: TabType) => void;
   isDarkMode: boolean;
   onThemeToggle: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({
-  currentTab,
-  onTabChange,
-  isDarkMode,
-  onThemeToggle,
-}) => {
+export const Header: React.FC<HeaderProps> = ({ isDarkMode, onThemeToggle }) => {
   const styles = useStyles();
 
-  const navItems: { id: TabType; label: string }[] = [
-    { id: 'labs', label: 'Лабораторные' },
-    { id: 'workspace', label: 'Рабочее пространство' },
-    { id: 'booking', label: 'Бронь' },
-    { id: 'history', label: 'История' },
+  // Вкладки шапки: адрес страницы и подпись
+  const navItems = [
+    { to: '/labs', label: 'Лабораторные' },
+    { to: '/workspace', label: 'Рабочее пространство' },
+    { to: '/booking', label: 'Бронь' },
+    { to: '/history', label: 'История' },
   ];
 
   return (
@@ -82,20 +74,18 @@ export const Header: React.FC<HeaderProps> = ({
       
       {/* Навигация сразу после имени */}
       <nav className={styles.navContainer}>
-        {navItems.map((item) => {
-          const isActive = currentTab === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => onTabChange(item.id)}
-              className={mergeClasses(styles.navButton,
-    isActive ? styles.navButtonActive : styles.navButtonInactive
-)}
-            >
-              {item.label}
-            </button>
-          );
-        })}
+        {navItems.map((item) => (
+          // NavLink сам знает, открыта ли его страница, и передаёт это в isActive
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) =>
+              mergeClasses(styles.navLink, isActive ? styles.navLinkActive : styles.navLinkInactive)
+            }
+          >
+            {item.label}
+          </NavLink>
+        ))}
       </nav>
 
       {/* Кнопка смены темы в самом правому углу */}
