@@ -1,18 +1,14 @@
 import React from 'react';
 import { makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
+import { Link } from 'react-router';
 import { LabStatus } from '../../types';
 
 const useStyles = makeStyles({
-  // Кнопка без стандартного вида, чтобы выглядеть как текстовая ссылка
-  button: {
-    background: 'none',
-    border: 'none',
-    padding: 0,
-    fontFamily: 'inherit',
+  // Ссылка без подчёркивания
+  link: {
+    textDecoration: 'none',
     fontSize: '14px',
     fontWeight: '600',
-    textAlign: 'left',
-    cursor: 'pointer',
   },
   green: {
     color: tokens.colorBrandForeground1,
@@ -30,10 +26,10 @@ const useStyles = makeStyles({
 interface LabActionProps {
   status: LabStatus;
   isLocked: boolean;
-  onOpenTask: () => void;
+  labId: string;
 }
 
-export const LabAction: React.FC<LabActionProps> = ({ status, isLocked, onOpenTask }) => {
+export const LabAction: React.FC<LabActionProps> = ({ status, isLocked, labId }) => {
   const styles = useStyles();
 
   if (isLocked) {
@@ -43,8 +39,8 @@ export const LabAction: React.FC<LabActionProps> = ({ status, isLocked, onOpenTa
   const colorClass = status === 'completed' ? styles.green : styles.orange;
 
   return (
-    <button type="button" className={mergeClasses(styles.button, colorClass)} onClick={onOpenTask}>
+    <Link to={`/labs/${labId}`} className={mergeClasses(styles.link, colorClass)}>
       Открыть задачу&nbsp;→
-    </button>
+    </Link>
   );
 };

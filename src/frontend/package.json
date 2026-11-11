@@ -12,7 +12,8 @@
     "@fluentui/react-components": "^9.54.0",
     "@fluentui/react-icons": "^2.0.260",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-router": "^7.18.5"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",
