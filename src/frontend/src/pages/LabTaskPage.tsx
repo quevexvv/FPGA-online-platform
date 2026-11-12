@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Button, makeStyles, Spinner, tokens } from '@fluentui/react-components';
+import { Button, makeStyles, Spinner, Textarea, tokens } from '@fluentui/react-components';
 import { Link, useParams } from 'react-router';
 import { getLab } from '../api/labs';
+import { submitSolution } from '../api/submissions';
 import { ApiError } from '../api/client';
 import { LabDetail } from '../types';
 
@@ -52,6 +53,30 @@ const useStyles = makeStyles({
     // Сохраняем переносы строк, которые преподаватель поставил в тексте
     whiteSpace: 'pre-wrap',
   },
+  codeField: {
+    width: '100%',
+  },
+  codeInput: {
+    minHeight: '320px',
+    maxHeight: 'none',
+    fontFamily: tokens.fontFamilyMonospace,
+    fontSize: '13px',
+    lineHeight: '1.5',
+  },
+  submitRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+    marginTop: '16px',
+  },
+  submitSuccess: {
+    fontSize: '14px',
+    color: tokens.colorStatusSuccessForeground1,
+  },
+  submitError: {
+    fontSize: '14px',
+    color: tokens.colorPaletteRedForeground1,
+  },
   // Загрузка и ошибки: сообщение по центру карточки
   stateMessage: {
     display: 'flex',
@@ -76,6 +101,12 @@ export const LabTaskPage: React.FC = () => {
   // Ошибку «не найдено» показываем без кнопки «Повторить»: повтор не поможет
   const [isNotFound, setIsNotFound] = useState(false);
 
+  // Код решения и состояние отправки
+  const [code, setCode] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitMessage, setSubmitMessage] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!labId) return;
 
@@ -86,7 +117,12 @@ export const LabTaskPage: React.FC = () => {
 
     getLab(labId)
       .then((data) => {
-        if (!ignore) setLab(data);
+        if (ignore) return;
+        setLab(data);
+        // Студент начинает с шаблона, который дал преподаватель
+        setCode(data.template);
+        setSubmitMessage(null);
+        setSubmitError(null);
       })
       .catch((err) => {
         if (ignore) return;
@@ -102,6 +138,32 @@ export const LabTaskPage: React.FC = () => {
       ignore = true;
     };
   }, [labId, reloadCount]);
+
+  const handleSubmit = async () => {
+    if (!labId) return;
+    setIsSubmitting(true);
+    setSubmitMessage(null);
+    setSubmitError(null);
+    try {
+      const submission = await submitSolution(labId, code);
+      // Время от сервера в UTC, показываем в часовом поясе пользователя
+      const time = new Date(submission.created_at).toLocaleTimeString('ru-RU', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      setSubmitMessage(`Решение отправлено в ${time}`);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 403) {
+        setSubmitError('Отправлять решения могут только студенты');
+      } else if (err instanceof ApiError && err.status === 422) {
+        setSubmitError('Код не принят: он пустой или больше 64 КБ');
+      } else {
+        setSubmitError('Не удалось отправить решение. Попробуйте ещё раз');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className={styles.pageContainer}>
@@ -131,6 +193,40 @@ export const LabTaskPage: React.FC = () => {
 
             <h2 className={styles.sectionTitle}>Интерфейс модуля</h2>
             <p className={styles.text}>{lab.interface_description}</p>
+
+            <h2 className={styles.sectionTitle}>Решение</h2>
+            <Textarea
+              className={styles.codeField}
+              textarea={{ className: styles.codeInput, spellCheck: false }}
+              resize="vertical"
+              aria-label="Код решения на Verilog"
+              value={code}
+              onChange={(_, data) => {
+                setCode(data.value);
+                // Код изменился — прошлое сообщение об отправке уже не про него
+                setSubmitMessage(null);
+              }}
+            />
+
+            <div className={styles.submitRow}>
+              <Button
+                appearance="primary"
+                onClick={handleSubmit}
+                disabled={isSubmitting || code.trim() === ''}
+              >
+                {isSubmitting ? 'Отправляем...' : 'Отправить решение'}
+              </Button>
+              {submitMessage && (
+                <span className={styles.submitSuccess} role="status">
+                  {submitMessage}
+                </span>
+              )}
+              {submitError && (
+                <span className={styles.submitError} role="alert">
+                  {submitError}
+                </span>
+              )}
+            </div>
           </>
         )}
       </div>

@@ -45,3 +45,10 @@ export interface User { // Поля в точности как в ответе �
   is_active: boolean;
   created_at: string; // дата и время в формате ISO (2026-11-11T22:03:20Z)
 }
+
+// Отправленное решение (ответ POST /labs/{id}/submissions)
+export interface SubmissionSummary {
+  id: string;
+  lab_id: string;
+  created_at: string; // дата и время в UTC, например '2026-11-12T16:03:38Z'
+}
