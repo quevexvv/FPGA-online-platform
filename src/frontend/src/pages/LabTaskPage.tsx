@@ -1,12 +1,139 @@
-import React from 'react';
-import { useParams } from 'react-router';
-import { EmptyPage } from '../components/EmptyPage';
-import { mockLabs } from '../mockLabs';
+import React, { useEffect, useState } from 'react';
+import { Button, makeStyles, Spinner, tokens } from '@fluentui/react-components';
+import { Link, useParams } from 'react-router';
+import { getLab } from '../api/labs';
+import { ApiError } from '../api/client';
+import { LabDetail } from '../types';
+
+const useStyles = makeStyles({
+  pageContainer: {
+    padding: '24px 32px',
+    height: '100%',
+    boxSizing: 'border-box',
+    overflowY: 'auto',
+    backgroundColor: tokens.colorNeutralBackground2,
+  },
+  card: {
+    maxWidth: '960px',
+    margin: '0 auto',
+    padding: '24px 32px 32px',
+    backgroundColor: tokens.colorNeutralBackground1,
+    borderRadius: tokens.borderRadiusXLarge,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+  },
+  backLink: {
+    textDecoration: 'none',
+    fontSize: '14px',
+    fontWeight: '600',
+    color: tokens.colorBrandForeground1,
+  },
+  title: {
+    margin: '16px 0 0',
+    fontSize: '20px',
+    fontWeight: '700',
+    color: tokens.colorNeutralForeground1,
+  },
+  description: {
+    margin: '4px 0 0',
+    fontSize: '14px',
+    color: tokens.colorNeutralForeground2,
+  },
+  sectionTitle: {
+    margin: '24px 0 8px',
+    fontSize: '16px',
+    fontWeight: '600',
+    color: tokens.colorNeutralForeground1,
+  },
+  text: {
+    margin: 0,
+    fontSize: '14px',
+    lineHeight: '1.6',
+    color: tokens.colorNeutralForeground1,
+    // Сохраняем переносы строк, которые преподаватель поставил в тексте
+    whiteSpace: 'pre-wrap',
+  },
+  // Загрузка и ошибки: сообщение по центру карточки
+  stateMessage: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '48px 0 16px',
+    fontSize: '14px',
+    color: tokens.colorNeutralForeground2,
+  },
+});
 
 export const LabTaskPage: React.FC = () => {
+  const styles = useStyles();
   // id работы берётся из адреса: /labs/:labId
   const { labId } = useParams();
-  const lab = mockLabs.find((item) => item.id === labId);
 
-  return <EmptyPage title={lab ? `Задание: ${lab.title}` : 'Лабораторная не найдена'} />;
+  // null — данные ещё не пришли
+  const [lab, setLab] = useState<LabDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadCount, setReloadCount] = useState(0);
+  // Ошибку «не найдено» показываем без кнопки «Повторить»: повтор не поможет
+  const [isNotFound, setIsNotFound] = useState(false);
+
+  useEffect(() => {
+    if (!labId) return;
+
+    let ignore = false;
+    setLab(null);
+    setError(null);
+    setIsNotFound(false);
+
+    getLab(labId)
+      .then((data) => {
+        if (!ignore) setLab(data);
+      })
+      .catch((err) => {
+        if (ignore) return;
+        // 404 — такой работы нет, 422 — в адресе вообще не UUID
+        if (err instanceof ApiError && (err.status === 404 || err.status === 422)) {
+          setIsNotFound(true);
+        } else {
+          setError('Не удалось загрузить задание');
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [labId, reloadCount]);
+
+  return (
+    <div className={styles.pageContainer}>
+      <div className={styles.card}>
+        <Link to="/labs" className={styles.backLink}>
+          ←&nbsp;К списку лабораторных
+        </Link>
+
+        {isNotFound || !labId ? (
+          <div className={styles.stateMessage}>Лабораторная не найдена</div>
+        ) : error ? (
+          <div className={styles.stateMessage} role="alert">
+            {error}
+            <Button onClick={() => setReloadCount((count) => count + 1)}>Повторить</Button>
+          </div>
+        ) : lab === null ? (
+          <div className={styles.stateMessage}>
+            <Spinner label="Загружаем задание..." />
+          </div>
+        ) : (
+          <>
+            <h1 className={styles.title}>{lab.title}</h1>
+            <p className={styles.description}>{lab.description}</p>
+
+            <h2 className={styles.sectionTitle}>Условие</h2>
+            <p className={styles.text}>{lab.statement}</p>
+
+            <h2 className={styles.sectionTitle}>Интерфейс модуля</h2>
+            <p className={styles.text}>{lab.interface_description}</p>
+          </>
+        )}
+      </div>
+    </div>
+  );
 };
