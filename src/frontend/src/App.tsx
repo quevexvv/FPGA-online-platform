@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FluentProvider, makeStyles, tokens } from '@fluentui/react-components';
+import { FluentProvider, makeStyles, Spinner, tokens } from '@fluentui/react-components';
 import { Navigate, Route, Routes } from 'react-router';
 import { customLightTheme, customDarkTheme } from './theme/themes';
 import { AuthPage } from './pages/AuthPage';
@@ -9,6 +9,7 @@ import { WorkspacePage } from './pages/WorkspacePage';
 import { BookingPage } from './pages/BookingPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { LabTaskPage } from './pages/LabTaskPage';
+import { useAuth } from './auth/AuthContext';
 
 const useStyles = makeStyles({
   appContainer: {
@@ -19,18 +20,30 @@ const useStyles = makeStyles({
     overflow: 'hidden',
     backgroundColor: tokens.colorNeutralBackground2,
   },
+  loadingScreen: {
+    width: '100vw',
+    height: '100vh',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: tokens.colorNeutralBackground2,
+  },
 });
 
 export const App: React.FC = () => {
   const styles = useStyles();
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const { user, isLoading } = useAuth();
   
-
   return (
     <FluentProvider theme={isDarkMode ? customDarkTheme : customLightTheme}>
-      {!isLoggedIn ? (
-        <AuthPage onLogin={() => setIsLoggedIn(true)} />
+      {isLoading ? (
+        // Пока сервер отвечает, вошёл ли пользователь, показываем индикатор загрузки
+        <div className={styles.loadingScreen}>
+          <Spinner label="Загрузка..." />
+        </div>
+      ) : !user ? (
+        <AuthPage />
       ) : (
         <div className={styles.appContainer}>
           {/* Хэдер со всеми вкладками и кнопкой смены темы */}

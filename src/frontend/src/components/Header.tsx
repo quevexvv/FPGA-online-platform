@@ -1,6 +1,11 @@
 import React from 'react';
 import { Button, makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
-import { WeatherMoon24Regular, WeatherSunny24Regular } from '@fluentui/react-icons';
+import {
+  SignOut24Regular,
+  WeatherMoon24Regular,
+  WeatherSunny24Regular,
+} from '@fluentui/react-icons';
+import { useAuth } from '../auth/AuthContext';
 import { NavLink } from 'react-router';
 
 const useStyles = makeStyles({
@@ -48,7 +53,7 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    minWidth: '60px',
+    gap: '8px',
   },
 });
 
@@ -59,6 +64,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ isDarkMode, onThemeToggle }) => {
   const styles = useStyles();
+  const { user, signOut } = useAuth();
 
   // Вкладки шапки: адрес страницы и подпись
   const navItems = [
@@ -70,7 +76,7 @@ export const Header: React.FC<HeaderProps> = ({ isDarkMode, onThemeToggle }) => 
 
   return (
     <header className={styles.header}>
-      <div className={styles.userText}>Иванов Иван (8К51Т)</div>
+      <div className={styles.userText}>{user?.full_name}</div>
       
       {/* Навигация сразу после имени */}
       <nav className={styles.navContainer}>
@@ -88,13 +94,20 @@ export const Header: React.FC<HeaderProps> = ({ isDarkMode, onThemeToggle }) => 
         ))}
       </nav>
 
-      {/* Кнопка смены темы в самом правому углу */}
+      {/* Кнопки темы и выхода в правом углу */}
       <div className={styles.rightSection}>
         <Button
           appearance="subtle"
           icon={isDarkMode ? <WeatherSunny24Regular /> : <WeatherMoon24Regular />}
           onClick={onThemeToggle}
           aria-label="Сменить тему"
+        />
+        <Button
+          appearance="subtle"
+          icon={<SignOut24Regular />}
+          onClick={signOut}
+          aria-label="Выйти"
+          title="Выйти"
         />
       </div>
     </header>
