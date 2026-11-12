@@ -28,12 +28,8 @@ export async function getCurrentUser(): Promise<User | null> {
   }
 }
 
-// Выход. В новой вкладке токена ещё нет, поэтому сначала берём его у сервера
+// Выход. CSRF-токен apiRequest подставит сам, даже в новой вкладке
 export async function logout(): Promise<void> {
-  if (!csrfStorage.get()) {
-    const { csrf_token } = await apiRequest<{ csrf_token: string }>('/auth/csrf');
-    csrfStorage.set(csrf_token);
-  }
   try {
     await apiRequest<void>('/auth/logout', { method: 'POST', withCsrf: true });
   } finally {

@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  Button,
   makeStyles,
   mergeClasses,
+  Spinner,
   Table,
   TableBody,
   TableCell,
@@ -10,10 +12,33 @@ import {
   TableRow,
   tokens,
 } from '@fluentui/react-components';
-import { mockLabs } from '../mockLabs';
+import { getLabs } from '../api/labs';
+import { LabItem, LabKind, LabSummary } from '../types';
 import { StatusBadge } from '../components/labs/StatusBadge';
 import { Deadline } from '../components/labs/Deadline';
 import { LabAction } from '../components/labs/LabAction';
+
+// Подпись под названием: тип схемы из API
+const kindLabels: Record<LabKind, string> = {
+  combinational: 'Комбинационная схема',
+  sequential: 'Последовательностная схема',
+};
+
+/*
+  TODO: срок, статус и блокировка пока не приходят из API, 
+подставляем значения по умолчанию.
+  Когда бэкенд начнёт их отдавать, поменять нужно будет только эту функцию!
+*/
+function toLabItem(lab: LabSummary): LabItem {
+  return {
+    ...lab,
+    subtitle: kindLabels[lab.kind],
+    deadline: '—',
+    deadlineType: 'future',
+    status: 'not_started',
+    isLocked: false,
+  };
+}
 
 const useStyles = makeStyles({
   pageContainer: {
@@ -96,10 +121,48 @@ const useStyles = makeStyles({
     fontSize: '14px',
     color: tokens.colorNeutralForeground2,
   },
+  stateMessage: {
+    // Загрузка, ошибка и пустой список: сообщение по центру карточки
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '32px',
+    fontSize: '14px',
+    color: tokens.colorNeutralForeground2,
+  },
 });
 
 export const LabsPage: React.FC = () => {
   const styles = useStyles();
+
+  // null — список ещё не пришёл
+  const [labs, setLabs] = useState<LabItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Счётчик попыток: увеличиваем его, чтобы загрузить список заново
+  const [reloadCount, setReloadCount] = useState(0);
+
+  useEffect(() => {
+    // Если пользователь ушёл со страницы до ответа сервера, ответ игнорируем
+    let ignore = false;
+    setLabs(null);
+    setError(null);
+
+    getLabs()
+      .then((data) => {
+        if (!ignore) setLabs(data.map(toLabItem));
+      })
+      .catch(() => {
+        if (!ignore) setError('Не удалось загрузить список лабораторных');
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [reloadCount]);
 
   // Колонки таблицы: подпись и доля ширины (в сумме 100%)
   const columns = [
@@ -118,58 +181,71 @@ export const LabsPage: React.FC = () => {
           <h1 className={styles.title}>Список лабораторных работ</h1>
         </div>
 
-        {/* Таблица: заголовок и строки в одном контейнере прокрутки */}
-        <div className={styles.tableScroll}>
-          <Table aria-label="Список лабораторных работ" className={styles.table}>
-            <TableHeader>
-              <TableRow className={styles.headerRow}>
-                {columns.map((column) => (
-                  <TableHeaderCell
-                    key={column.key}
-                    className={styles.headerCell}
-                    style={{ width: column.width }}
-                  >
-                    {column.label}
-                  </TableHeaderCell>
-                ))}
-              </TableRow>
-            </TableHeader>
-
-            <TableBody>
-              {mockLabs.map((lab) => (
-                <TableRow key={lab.id} className={styles.row}>
-                  {/* Название */}
-                  <TableCell className={styles.cell}>
-                    <div className={styles.labTitle}>{lab.title}</div>
-                    <div className={styles.labSubtitle}>{lab.subtitle}</div>
-                  </TableCell>
-
-                  {/* Описание */}
-                  <TableCell className={mergeClasses(styles.cell, styles.description)}>
-                    {lab.description}
-                  </TableCell>
-
-                  {/* Срок сдачи */}
-                  <TableCell className={styles.cell}>
-                    <Deadline date={lab.deadline} type={lab.deadlineType} />
-                  </TableCell>
-                  {/* Статус */}
-                  <TableCell className={styles.cell}>
-                    <StatusBadge status={lab.status} />
-                  </TableCell>
-                  {/* Действие */}
-                  <TableCell className={styles.cell}>
-                    <LabAction
-                      status={lab.status}
-                      isLocked={lab.isLocked}
-                      labId={lab.id}
-                    />
-                  </TableCell>
+        {error ? (
+          <div className={styles.stateMessage} role="alert">
+            {error}
+            <Button onClick={() => setReloadCount((count) => count + 1)}>Повторить</Button>
+          </div>
+        ) : labs === null ? (
+          <div className={styles.stateMessage}>
+            <Spinner label="Загружаем лабораторные..." />
+          </div>
+        ) : labs.length === 0 ? (
+          <div className={styles.stateMessage}>Лабораторных пока нет</div>
+        ) : (
+          // Таблица: заголовок и строки в одном контейнере прокрутки
+          <div className={styles.tableScroll}>
+            <Table aria-label="Список лабораторных работ" className={styles.table}>
+              <TableHeader>
+                <TableRow className={styles.headerRow}>
+                  {columns.map((column) => (
+                    <TableHeaderCell
+                      key={column.key}
+                      className={styles.headerCell}
+                      style={{ width: column.width }}
+                    >
+                      {column.label}
+                    </TableHeaderCell>
+                  ))}
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+
+              <TableBody>
+                {labs.map((lab) => (
+                  <TableRow key={lab.id} className={styles.row}>
+                    {/* Название */}
+                    <TableCell className={styles.cell}>
+                      <div className={styles.labTitle}>{lab.title}</div>
+                      <div className={styles.labSubtitle}>{lab.subtitle}</div>
+                    </TableCell>
+
+                    {/* Описание */}
+                    <TableCell className={mergeClasses(styles.cell, styles.description)}>
+                      {lab.description}
+                    </TableCell>
+
+                    {/* Срок сдачи */}
+                    <TableCell className={styles.cell}>
+                      <Deadline date={lab.deadline} type={lab.deadlineType} />
+                    </TableCell>
+                    {/* Статус */}
+                    <TableCell className={styles.cell}>
+                      <StatusBadge status={lab.status} />
+                    </TableCell>
+                    {/* Действие */}
+                    <TableCell className={styles.cell}>
+                      <LabAction
+                        status={lab.status}
+                        isLocked={lab.isLocked}
+                        labId={lab.id}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </div>
     </div>
   );

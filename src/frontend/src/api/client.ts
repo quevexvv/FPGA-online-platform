@@ -39,8 +39,19 @@ async function readErrorMessage(response: Response): Promise<string> {
   return `Ошибка сервера: ${response.status}`;
 }
 
-// Один общий способ обращаться к API: адрес, cookie, JSON и обработка ошибок
-export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+// CSRF-токен из хранилища, а если его нет (например, в новой вкладке) — у сервера
+async function getCsrfToken(): Promise<string> {
+  const saved = csrfStorage.get();
+  if (saved) {
+    return saved;
+  }
+  const { csrf_token } = await apiRequest<{ csrf_token: string }>('/auth/csrf');
+  csrfStorage.set(csrf_token);
+  return csrf_token;
+}
+
+// Собирает и отправляет запрос: адрес, заголовки, cookie и тело в JSON
+async function sendRequest(path: string, options: RequestOptions): Promise<Response> {
   const { method = 'GET', body, withCsrf = false } = options;
 
   const headers: Record<string, string> = {};
@@ -48,18 +59,27 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     headers['Content-Type'] = 'application/json';
   }
   if (withCsrf) {
-    const token = csrfStorage.get();
-    if (token) {
-      headers['X-CSRF-Token'] = token;
-    }
+    headers['X-CSRF-Token'] = await getCsrfToken();
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  return fetch(`${API_BASE}${path}`, {
     method,
     headers,
     credentials: 'include', // отправлять cookie сессии
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+}
+
+// Один общий способ обращаться к API: запрос, проверка ответа и разбор JSON
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  let response = await sendRequest(path, options);
+
+  // Токен мог устареть, например после входа в другой вкладке.
+  // Забываем его, берём новый у сервера и повторяем запрос один раз
+  if (response.status === 403 && options.withCsrf) {
+    csrfStorage.clear();
+    response = await sendRequest(path, options);
+  }
 
   if (!response.ok) {
     throw new ApiError(response.status, await readErrorMessage(response));
