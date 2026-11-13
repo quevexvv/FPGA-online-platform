@@ -6,6 +6,7 @@ from sqlalchemy import Row
 from sqlalchemy.orm import Session
 
 from app.modules.labs.service import get_lab
+from app.modules.runs.service import enqueue
 from app.modules.submissions import repository
 from app.modules.submissions.models import Submission
 from app.modules.submissions.schemas import SubmissionCreate
@@ -17,6 +18,7 @@ def submit(db: Session, user: User, lab_id: UUID, data: SubmissionCreate) -> Sub
         raise HTTPException(status_code=403, detail="Only students can submit solutions")
     get_lab(db, lab_id)
     submission = repository.create(db, user.id, lab_id, data.source_code)
+    enqueue(db, submission.id)
     db.commit()
     return submission
 

@@ -25,6 +25,7 @@ def register(db: Session, data: Registration) -> User:
     user = User(
         email=str(data.email),
         full_name=data.full_name,
+        group=data.group,
         password_hash=hash_password(data.password.get_secret_value()),
         role=UserRole.student.value,
     )
@@ -36,6 +37,15 @@ def register(db: Session, data: Registration) -> User:
         if find_user(db, str(data.email)) is not None:
             raise HTTPException(status_code=409, detail="Email is already registered") from None
         raise
+    db.refresh(user)
+    return user
+
+
+def update_group(db: Session, user: User, group: str | None) -> User:
+    if user.role != UserRole.student:
+        raise HTTPException(status_code=403, detail="Only students can set a study group")
+    user.group = group
+    db.commit()
     db.refresh(user)
     return user
 

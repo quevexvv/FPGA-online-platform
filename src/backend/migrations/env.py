@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.db.base import Base
 from app.modules.auth.models import AuthSession  # noqa: F401
 from app.modules.labs.models import Lab  # noqa: F401
+from app.modules.runs.models import Run  # noqa: F401
 from app.modules.submissions.models import Submission  # noqa: F401
 from app.modules.users.models import User  # noqa: F401
 
