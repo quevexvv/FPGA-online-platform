@@ -5,7 +5,7 @@ import {
   WeatherMoon24Regular,
   WeatherSunny24Regular,
 } from '@fluentui/react-icons';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '@/auth/AuthContext';
 import { NavLink } from 'react-router';
 
 const useStyles = makeStyles({
@@ -102,7 +102,7 @@ export const Header: React.FC<HeaderProps> = ({ isDarkMode, onThemeToggle }) => 
         {/* Группы может не быть: у преподавателя или если студент её не указал */}
         {user?.group && <span className={styles.groupText}>{user.group}</span>}
       </div>
-      
+
       {/* Навигация сразу после имени */}
       <nav className={styles.navContainer}>
         {navItems.map((item) => (

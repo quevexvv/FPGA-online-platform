@@ -1,7 +1,7 @@
 import React from 'react';
 import { makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
 import { Link } from 'react-router';
-import { LabStatus } from '../../types';
+import { LabStatus } from '@/types';
 
 const useStyles = makeStyles({
   // Ссылка без подчёркивания
@@ -35,7 +35,7 @@ export const LabAction: React.FC<LabActionProps> = ({ status, isLocked, labId })
   if (isLocked) {
     return <span className={styles.blocked}>Заблокировано</span>;
   }
-  
+
   const colorClass = status === 'completed' ? styles.green : styles.orange;
 
   return (

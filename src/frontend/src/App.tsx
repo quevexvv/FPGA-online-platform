@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import { FluentProvider, makeStyles, Spinner, tokens } from '@fluentui/react-components';
 import { Navigate, Route, Routes } from 'react-router';
-import { customLightTheme, customDarkTheme } from './theme/themes';
-import { AuthPage } from './pages/AuthPage';
-import { Header } from './components/Header';
-import { LabsPage } from './pages/LabsPage';
-import { WorkspacePage } from './pages/WorkspacePage';
-import { BookingPage } from './pages/BookingPage';
-import { HistoryPage } from './pages/HistoryPage';
-import { LabTaskPage } from './pages/LabTaskPage';
-import { useAuth } from './auth/AuthContext';
+import { customLightTheme, customDarkTheme } from '@/theme/themes';
+import { AuthPage } from '@/pages/AuthPage';
+import { Header } from '@/components/Header';
+import { LabsPage } from '@/pages/LabsPage';
+import { WorkspacePage } from '@/pages/WorkspacePage';
+import { BookingPage } from '@/pages/BookingPage';
+import { HistoryPage } from '@/pages/HistoryPage';
+import { LabTaskPage } from '@/pages/LabTaskPage';
+import { useAuth } from '@/auth/AuthContext';
 
 const useStyles = makeStyles({
   appContainer: {
@@ -34,7 +34,7 @@ export const App: React.FC = () => {
   const styles = useStyles();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const { user, isLoading } = useAuth();
-  
+
   return (
     <FluentProvider theme={isDarkMode ? customDarkTheme : customLightTheme}>
       {isLoading ? (
@@ -47,10 +47,7 @@ export const App: React.FC = () => {
       ) : (
         <div className={styles.appContainer}>
           {/* Хэдер со всеми вкладками и кнопкой смены темы */}
-          <Header
-            isDarkMode={isDarkMode}
-            onThemeToggle={() => setIsDarkMode(!isDarkMode)}
-          />
+          <Header isDarkMode={isDarkMode} onThemeToggle={() => setIsDarkMode(!isDarkMode)} />
 
           {/* Тело страниц */}
           <main style={{ flex: 1, overflow: 'hidden' }}>

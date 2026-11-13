@@ -1,4 +1,4 @@
-import { LabDetail, LabSummary } from '../types';
+import { LabDetail, LabSummary } from '@/types';
 import { apiRequest } from './client';
 
 // Список опубликованных лабораторных (краткие карточки для таблицы)

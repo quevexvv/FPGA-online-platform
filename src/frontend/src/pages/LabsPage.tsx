@@ -12,11 +12,11 @@ import {
   TableRow,
   tokens,
 } from '@fluentui/react-components';
-import { getLabs } from '../api/labs';
-import { LabItem, LabKind, LabSummary } from '../types';
-import { StatusBadge } from '../components/labs/StatusBadge';
-import { Deadline } from '../components/labs/Deadline';
-import { LabAction } from '../components/labs/LabAction';
+import { getLabs } from '@/api/labs';
+import { LabItem, LabKind, LabSummary } from '@/types';
+import { StatusBadge } from '@/components/labs/StatusBadge';
+import { Deadline } from '@/components/labs/Deadline';
+import { LabAction } from '@/components/labs/LabAction';
 
 // Подпись под названием: тип схемы из API
 const kindLabels: Record<LabKind, string> = {
@@ -148,8 +148,6 @@ export const LabsPage: React.FC = () => {
   useEffect(() => {
     // Если пользователь ушёл со страницы до ответа сервера, ответ игнорируем
     let ignore = false;
-    setLabs(null);
-    setError(null);
 
     getLabs()
       .then((data) => {
@@ -163,6 +161,12 @@ export const LabsPage: React.FC = () => {
       ignore = true;
     };
   }, [reloadCount]);
+
+  // Повтор: сбрасываем ошибку (появится загрузка) и запускаем эффект заново
+  const handleRetry = () => {
+    setError(null);
+    setReloadCount((count) => count + 1);
+  };
 
   // Колонки таблицы: подпись и доля ширины (в сумме 100%)
   const columns = [
@@ -184,7 +188,7 @@ export const LabsPage: React.FC = () => {
         {error ? (
           <div className={styles.stateMessage} role="alert">
             {error}
-            <Button onClick={() => setReloadCount((count) => count + 1)}>Повторить</Button>
+            <Button onClick={handleRetry}>Повторить</Button>
           </div>
         ) : labs === null ? (
           <div className={styles.stateMessage}>
@@ -234,11 +238,7 @@ export const LabsPage: React.FC = () => {
                     </TableCell>
                     {/* Действие */}
                     <TableCell className={styles.cell}>
-                      <LabAction
-                        status={lab.status}
-                        isLocked={lab.isLocked}
-                        labId={lab.id}
-                      />
+                      <LabAction status={lab.status} isLocked={lab.isLocked} labId={lab.id} />
                     </TableCell>
                   </TableRow>
                 ))}

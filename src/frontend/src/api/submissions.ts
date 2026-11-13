@@ -1,4 +1,4 @@
-import { RunStatus, SubmissionSummary } from '../types';
+import { RunStatus, SubmissionSummary } from '@/types';
 import { apiRequest } from './client';
 
 // Отправить код решения. Сервер сохраняет его и ставит проверку в очередь

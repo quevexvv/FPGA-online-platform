@@ -11,7 +11,7 @@ import {
   TableRow,
   tokens,
 } from '@fluentui/react-components';
-import { RunResult, RunStage, RunStatus } from '../../types';
+import { RunResult, RunStage, RunStatus } from '@/types';
 
 // Подписи этапов проверки на стенде
 const stageLabels: Record<RunStage, string> = {

@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Button, makeStyles, Spinner, Textarea, tokens } from '@fluentui/react-components';
 import { Link, useParams } from 'react-router';
-import { getLab } from '../api/labs';
-import { submitSolution } from '../api/submissions';
-import { ApiError } from '../api/client';
-import { LabDetail } from '../types';
-import { useRunStatus } from '../hooks/useRunStatus';
-import { RunStatusPanel } from '../components/labs/RunStatusPanel';
+import { getLab } from '@/api/labs';
+import { submitSolution } from '@/api/submissions';
+import { ApiError } from '@/api/client';
+import { LabDetail } from '@/types';
+import { useRunStatus } from '@/hooks/useRunStatus';
+import { RunStatusPanel } from '@/components/labs/RunStatusPanel';
 
 const useStyles = makeStyles({
   pageContainer: {
@@ -91,10 +91,9 @@ const useStyles = makeStyles({
   },
 });
 
-export const LabTaskPage: React.FC = () => {
+// Содержимое страницы задания. labId приходит от LabTaskPage ниже
+const LabTaskContent: React.FC<{ labId: string | undefined }> = ({ labId }) => {
   const styles = useStyles();
-  // id работы берётся из адреса: /labs/:labId
-  const { labId } = useParams();
 
   // null — данные ещё не пришли
   const [lab, setLab] = useState<LabDetail | null>(null);
@@ -117,9 +116,6 @@ export const LabTaskPage: React.FC = () => {
     if (!labId) return;
 
     let ignore = false;
-    setLab(null);
-    setError(null);
-    setIsNotFound(false);
 
     getLab(labId)
       .then((data) => {
@@ -127,9 +123,6 @@ export const LabTaskPage: React.FC = () => {
         setLab(data);
         // Студент начинает с шаблона, который дал преподаватель
         setCode(data.template);
-        setSubmitMessage(null);
-        setSubmitError(null);
-        setSubmissionId(null);
       })
       .catch((err) => {
         if (ignore) return;
@@ -145,6 +138,12 @@ export const LabTaskPage: React.FC = () => {
       ignore = true;
     };
   }, [labId, reloadCount]);
+
+  // Повтор после ошибки: убираем ошибку (появится загрузка) и запускаем эффект заново
+  const handleRetry = () => {
+    setError(null);
+    setReloadCount((count) => count + 1);
+  };
 
   const handleSubmit = async () => {
     if (!labId) return;
@@ -185,7 +184,7 @@ export const LabTaskPage: React.FC = () => {
         ) : error ? (
           <div className={styles.stateMessage} role="alert">
             {error}
-            <Button onClick={() => setReloadCount((count) => count + 1)}>Повторить</Button>
+            <Button onClick={handleRetry}>Повторить</Button>
           </div>
         ) : lab === null ? (
           <div className={styles.stateMessage}>
@@ -247,4 +246,12 @@ export const LabTaskPage: React.FC = () => {
       </div>
     </div>
   );
+};
+
+export const LabTaskPage: React.FC = () => {
+  // id работы берётся из адреса: /labs/:labId
+  const { labId } = useParams();
+  // key: при переходе к другой лабораторной React создаёт содержимое заново,
+  // и всё состояние (задание, код, статус отправки) начинается с чистого листа
+  return <LabTaskContent key={labId} labId={labId} />;
 };

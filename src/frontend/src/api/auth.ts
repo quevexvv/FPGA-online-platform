@@ -1,4 +1,4 @@
-import { User } from '../types';
+import { User } from '@/types';
 import { ApiError, apiRequest, csrfStorage } from './client';
 
 interface LoginResult {

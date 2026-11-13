@@ -10,8 +10,8 @@ import {
   Title2,
   tokens,
 } from '@fluentui/react-components';
-import { useAuth } from '../auth/AuthContext';
-import { ApiError } from '../api/client';
+import { useAuth } from '@/auth/AuthContext';
+import { ApiError } from '@/api/client';
 
 const useStyles = makeStyles({
   pageLayout: {
@@ -59,7 +59,7 @@ export const AuthPage: React.FC = () => {
       setError(
         err instanceof ApiError && err.status === 401
           ? 'Неверный email или пароль'
-          : 'Не удалось войти. Проверьте, что сервер запущен'
+          : 'Не удалось войти. Проверьте, что сервер запущен',
       );
     } finally {
       setIsSubmitting(false);
