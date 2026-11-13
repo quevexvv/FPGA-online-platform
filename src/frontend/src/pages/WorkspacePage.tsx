@@ -8,9 +8,16 @@ import {
   TabList,
   tokens,
 } from '@fluentui/react-components';
+import { Play20Filled } from '@fluentui/react-icons';
 import { Link, useParams } from 'react-router';
+import { ApiError } from '@/api/client';
+import { submitSolution } from '@/api/submissions';
 import { useLab } from '@/hooks/useLab';
+import { useRunStatus } from '@/hooks/useRunStatus';
 import { CodeEditor } from '@/components/workspace/CodeEditor';
+import { RunLog } from '@/components/workspace/RunLog';
+import { RunSteps } from '@/components/workspace/RunSteps';
+import { getStepStates } from '@/components/workspace/runProgress';
 import { LabDetail } from '@/types';
 import boardImage from '@/assets/fpga-board.svg';
 
@@ -57,6 +64,22 @@ const useStyles = makeStyles({
   checkCard: {
     flex: 1,
     padding: '20px 24px',
+    gap: '20px',
+  },
+  // Кнопка отправки и шаги проверки в одну строку, как на макете
+  checkHeader: {
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '32px',
+  },
+  submitButton: {
+    flexShrink: 0,
+    minWidth: '240px',
+  },
+  steps: {
+    flex: 1,
+    minWidth: 0,
   },
   tabs: {
     flexShrink: 0,
@@ -92,15 +115,6 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground1,
     whiteSpace: 'pre-wrap',
   },
-  placeholder: {
-    flex: 1,
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: '24px',
-    fontSize: '14px',
-    color: tokens.colorNeutralForeground2,
-  },
   // Сообщение на всю страницу: загрузка, ошибка, лабораторная не выбрана
   stateMessage: {
     height: '100%',
@@ -126,6 +140,44 @@ type EditorTab = 'code' | 'task';
 const WorkspaceContent: React.FC<{ lab: LabDetail }> = ({ lab }) => {
   const styles = useStyles();
   const [tab, setTab] = useState<EditorTab>('code');
+  // Студент начинает с шаблона, который дал преподаватель
+  const [code, setCode] = useState(lab.template);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitMessage, setSubmitMessage] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  // Последняя отправка: за её проверкой и следим
+  const [submissionId, setSubmissionId] = useState<string | null>(null);
+  const runStatus = useRunStatus(submissionId);
+
+  // Пока проверка в очереди или идёт, новую отправку не принимаем
+  const isChecking = runStatus.run?.state === 'queued' || runStatus.run?.state === 'running';
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    setSubmitMessage(null);
+    setSubmitError(null);
+    try {
+      const submission = await submitSolution(lab.id, code);
+      // Время от сервера в UTC, показываем в часовом поясе пользователя
+      const time = new Date(submission.created_at).toLocaleTimeString('ru-RU', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      setSubmitMessage(`Решение отправлено в ${time}`);
+      setSubmissionId(submission.id);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 403) {
+        setSubmitError('Отправлять решения могут только студенты');
+      } else if (err instanceof ApiError && err.status === 422) {
+        setSubmitError('Код не принят: он пустой или больше 64 КБ');
+      } else {
+        setSubmitError('Не удалось отправить решение. Попробуйте ещё раз');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className={styles.page}>
@@ -144,8 +196,7 @@ const WorkspaceContent: React.FC<{ lab: LabDetail }> = ({ lab }) => {
         <div className={tab === 'code' ? styles.editorWrapper : styles.hidden}>
           <CodeEditor
             initialValue={lab.template}
-            // Текст решения понадобится для отправки, её добавим в следующем коммите
-            onChange={() => {}}
+            onChange={setCode}
             ariaLabel="Код решения на Verilog"
           />
         </div>
@@ -170,7 +221,29 @@ const WorkspaceContent: React.FC<{ lab: LabDetail }> = ({ lab }) => {
           className={mergeClasses(styles.card, styles.checkCard)}
           aria-label="Проверка решения"
         >
-          <div className={styles.placeholder}>Здесь будут отправка и ход проверки</div>
+          <div className={styles.checkHeader}>
+            <Button
+              className={styles.submitButton}
+              appearance="primary"
+              size="large"
+              icon={<Play20Filled />}
+              onClick={handleSubmit}
+              disabled={isSubmitting || isChecking || code.trim() === ''}
+            >
+              {isSubmitting ? 'Отправляем...' : 'Отправить на проверку'}
+            </Button>
+            <div className={styles.steps}>
+              <RunSteps states={getStepStates(runStatus.run)} />
+            </div>
+          </div>
+
+          <RunLog
+            run={runStatus.run}
+            submitMessage={submitMessage}
+            submitError={submitError}
+            isConnectionLost={runStatus.isConnectionLost}
+            runError={runStatus.error}
+          />
         </section>
       </div>
     </div>
