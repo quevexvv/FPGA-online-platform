@@ -12,11 +12,11 @@ import {
   TableRow,
   tokens,
 } from '@fluentui/react-components';
-import { getLabs } from '../api/labs';
-import { LabItem, LabKind, LabSummary } from '../types';
-import { StatusBadge } from '../components/labs/StatusBadge';
-import { Deadline } from '../components/labs/Deadline';
-import { LabAction } from '../components/labs/LabAction';
+import { getLabs } from '@/api/labs';
+import { LabItem, LabKind, LabSummary } from '@/types';
+import { StatusBadge } from '@/components/labs/StatusBadge';
+import { Deadline } from '@/components/labs/Deadline';
+import { LabAction } from '@/components/labs/LabAction';
 
 // Подпись под названием: тип схемы из API
 const kindLabels: Record<LabKind, string> = {

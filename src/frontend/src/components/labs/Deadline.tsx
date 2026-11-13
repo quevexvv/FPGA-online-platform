@@ -1,6 +1,6 @@
 import React from 'react';
 import { makeStyles, tokens } from '@fluentui/react-components';
-import { LabItem } from '../../types';
+import { LabItem } from '@/types';
 
 const useStyles = makeStyles({
   // Срок сдачи: выделяем только сегодняшний и уже сданный

@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Button, makeStyles, Spinner, Textarea, tokens } from '@fluentui/react-components';
 import { Link, useParams } from 'react-router';
-import { getLab } from '../api/labs';
-import { submitSolution } from '../api/submissions';
-import { ApiError } from '../api/client';
-import { LabDetail } from '../types';
-import { useRunStatus } from '../hooks/useRunStatus';
-import { RunStatusPanel } from '../components/labs/RunStatusPanel';
+import { getLab } from '@/api/labs';
+import { submitSolution } from '@/api/submissions';
+import { ApiError } from '@/api/client';
+import { LabDetail } from '@/types';
+import { useRunStatus } from '@/hooks/useRunStatus';
+import { RunStatusPanel } from '@/components/labs/RunStatusPanel';
 
 const useStyles = makeStyles({
   pageContainer: {

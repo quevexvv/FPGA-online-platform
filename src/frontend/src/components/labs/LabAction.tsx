@@ -1,7 +1,7 @@
 import React from 'react';
 import { makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
 import { Link } from 'react-router';
-import { LabStatus } from '../../types';
+import { LabStatus } from '@/types';
 
 const useStyles = makeStyles({
   // Ссылка без подчёркивания

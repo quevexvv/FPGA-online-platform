@@ -1,6 +1,6 @@
 import React from 'react';
 import { makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
-import { LabStatus } from '../../types';
+import { LabStatus } from '@/types';
 
 const useStyles = makeStyles({
   // Общая форма бейджа, цвета задаются отдельными стилями ниже

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { ApiError } from '../api/client';
-import { getSubmissionRun } from '../api/submissions';
-import { RunStatus } from '../types';
+import { ApiError } from '@/api/client';
+import { getSubmissionRun } from '@/api/submissions';
+import { RunStatus } from '@/types';
 
 // Через сколько повторить запрос, если сервер не ответил
 const RETRY_DELAY_MS = 5000;

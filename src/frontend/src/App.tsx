@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import { FluentProvider, makeStyles, Spinner, tokens } from '@fluentui/react-components';
 import { Navigate, Route, Routes } from 'react-router';
-import { customLightTheme, customDarkTheme } from './theme/themes';
-import { AuthPage } from './pages/AuthPage';
-import { Header } from './components/Header';
-import { LabsPage } from './pages/LabsPage';
-import { WorkspacePage } from './pages/WorkspacePage';
-import { BookingPage } from './pages/BookingPage';
-import { HistoryPage } from './pages/HistoryPage';
-import { LabTaskPage } from './pages/LabTaskPage';
-import { useAuth } from './auth/AuthContext';
+import { customLightTheme, customDarkTheme } from '@/theme/themes';
+import { AuthPage } from '@/pages/AuthPage';
+import { Header } from '@/components/Header';
+import { LabsPage } from '@/pages/LabsPage';
+import { WorkspacePage } from '@/pages/WorkspacePage';
+import { BookingPage } from '@/pages/BookingPage';
+import { HistoryPage } from '@/pages/HistoryPage';
+import { LabTaskPage } from '@/pages/LabTaskPage';
+import { useAuth } from '@/auth/AuthContext';
 
 const useStyles = makeStyles({
   appContainer: {

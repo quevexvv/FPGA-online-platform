@@ -5,7 +5,7 @@ import {
   WeatherMoon24Regular,
   WeatherSunny24Regular,
 } from '@fluentui/react-icons';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '@/auth/AuthContext';
 import { NavLink } from 'react-router';
 
 const useStyles = makeStyles({

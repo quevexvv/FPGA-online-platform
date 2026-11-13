@@ -10,8 +10,8 @@ import {
   Title2,
   tokens,
 } from '@fluentui/react-components';
-import { useAuth } from '../auth/AuthContext';
-import { ApiError } from '../api/client';
+import { useAuth } from '@/auth/AuthContext';
+import { ApiError } from '@/api/client';
 
 const useStyles = makeStyles({
   pageLayout: {

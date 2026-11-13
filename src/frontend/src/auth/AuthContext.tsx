@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { getCurrentUser, login, logout } from '../api/auth';
-import { User } from '../types';
+import { getCurrentUser, login, logout } from '@/api/auth';
+import { User } from '@/types';
 
 interface AuthContextValue {
   user: User | null; // null — пользователь не вошёл
