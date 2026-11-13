@@ -9,7 +9,14 @@ from app.db.session import get_db
 from app.modules.auth import service
 from app.modules.auth.models import AuthSession
 from app.modules.auth.repository import revoke_session
-from app.modules.auth.schemas import Credentials, CsrfResult, LoginResult, Registration, UserPublic
+from app.modules.auth.schemas import (
+    Credentials,
+    CsrfResult,
+    GroupUpdate,
+    LoginResult,
+    Registration,
+    UserPublic,
+)
 from app.modules.users.models import User
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -72,6 +79,11 @@ def login(data: Credentials, request: Request, response: Response, db: Db):
 @router.get("/me", response_model=UserPublic)
 def me(user: Annotated[User, Depends(get_current_user)]):
     return user
+
+
+@router.patch("/me", response_model=UserPublic, dependencies=[Depends(require_csrf)])
+def update_me(data: GroupUpdate, user: Annotated[User, Depends(get_current_user)], db: Db):
+    return service.update_group(db, user, data.group)
 
 
 @router.get("/csrf", response_model=CsrfResult, dependencies=[Depends(check_origin)])
