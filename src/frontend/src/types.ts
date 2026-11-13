@@ -52,3 +52,61 @@ export interface SubmissionSummary {
   lab_id: string;
   created_at: string; // дата и время в UTC, например '2026-11-12T16:03:38Z'
 }
+
+// Статус проверки решения (GET /submissions/{id}/run). 
+// Имена полей как в ответе сервера
+export type RunState = 'not_started' | 'queued' | 'running' | 'finished';
+export type RunStage =
+  | 'dispatch'
+  | 'validating'
+  | 'locking'
+  | 'building'
+  | 'programming'
+  | 'testing'
+  | 'finalizing';
+export type RunResult =
+  | 'passed'
+  | 'mismatch'
+  | 'build_error'
+  | 'board_error'
+  | 'invalid_input'
+  | 'busy'
+  | 'internal_error';
+
+// Итоги по всем тестам, включая скрытые
+export interface RunSummary {
+  planned: number;
+  executed: number;
+  passed: number;
+  failed: number;
+}
+
+// Один открытый тест: что подали на вход, что получили и что ожидали
+export interface RunTest {
+  vector_index: number;
+  din: string; // вход, hex-строка из 10 бит, например '0x003'
+  steps: number; // сколько тактов прошло
+  dout: string; // полученный выход, hex-строка из 18 бит, например '0x00001'
+  expected_dout: string; // ожидаемый выход
+  mask: string; // какие биты выхода сравниваются
+  match: boolean;
+}
+
+export interface RunStatus {
+  submission_id: string;
+  run_id: string | null; // null — проверку ещё не запускали
+  state: RunState;
+  stage: RunStage | null;
+  mode: 'hardware' | 'mock' | null;
+  result_status: RunResult | null; // null, пока проверка не закончилась
+  hardware_verified: boolean;
+  queued_at: string | null;
+  started_at: string | null;
+  updated_at: string | null;
+  finished_at: string | null;
+  elapsed_seconds: number;
+  poll_after_seconds: number | null; // через сколько секунд спросить снова; null — больше не нужно
+  summary: RunSummary | null;
+  tests: RunTest[];
+  error: { code: RunResult; message: string } | null;
+}
