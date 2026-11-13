@@ -116,14 +116,13 @@ const LabTaskContent: React.FC<{ labId: string | undefined }> = ({ labId }) => {
     if (!labId) return;
 
     let ignore = false;
-    
+
     getLab(labId)
       .then((data) => {
         if (ignore) return;
         setLab(data);
         // Студент начинает с шаблона, который дал преподаватель
         setCode(data.template);
-
       })
       .catch((err) => {
         if (ignore) return;

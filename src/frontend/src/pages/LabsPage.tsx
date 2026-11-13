@@ -148,7 +148,7 @@ export const LabsPage: React.FC = () => {
   useEffect(() => {
     // Если пользователь ушёл со страницы до ответа сервера, ответ игнорируем
     let ignore = false;
-    
+
     getLabs()
       .then((data) => {
         if (!ignore) setLabs(data.map(toLabItem));
@@ -238,11 +238,7 @@ export const LabsPage: React.FC = () => {
                     </TableCell>
                     {/* Действие */}
                     <TableCell className={styles.cell}>
-                      <LabAction
-                        status={lab.status}
-                        isLocked={lab.isLocked}
-                        labId={lab.id}
-                      />
+                      <LabAction status={lab.status} isLocked={lab.isLocked} labId={lab.id} />
                     </TableCell>
                   </TableRow>
                 ))}

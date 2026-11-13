@@ -35,7 +35,7 @@ export const LabAction: React.FC<LabActionProps> = ({ status, isLocked, labId })
   if (isLocked) {
     return <span className={styles.blocked}>Заблокировано</span>;
   }
-  
+
   const colorClass = status === 'completed' ? styles.green : styles.orange;
 
   return (

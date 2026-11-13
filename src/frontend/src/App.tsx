@@ -34,7 +34,7 @@ export const App: React.FC = () => {
   const styles = useStyles();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const { user, isLoading } = useAuth();
-  
+
   return (
     <FluentProvider theme={isDarkMode ? customDarkTheme : customLightTheme}>
       {isLoading ? (
@@ -47,10 +47,7 @@ export const App: React.FC = () => {
       ) : (
         <div className={styles.appContainer}>
           {/* Хэдер со всеми вкладками и кнопкой смены темы */}
-          <Header
-            isDarkMode={isDarkMode}
-            onThemeToggle={() => setIsDarkMode(!isDarkMode)}
-          />
+          <Header isDarkMode={isDarkMode} onThemeToggle={() => setIsDarkMode(!isDarkMode)} />
 
           {/* Тело страниц */}
           <main style={{ flex: 1, overflow: 'hidden' }}>

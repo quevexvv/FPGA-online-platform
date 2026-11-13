@@ -59,7 +59,7 @@ export const AuthPage: React.FC = () => {
       setError(
         err instanceof ApiError && err.status === 401
           ? 'Неверный email или пароль'
-          : 'Не удалось войти. Проверьте, что сервер запущен'
+          : 'Не удалось войти. Проверьте, что сервер запущен',
       );
     } finally {
       setIsSubmitting(false);
