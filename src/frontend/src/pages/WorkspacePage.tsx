@@ -170,9 +170,6 @@ const WorkspaceContent: React.FC<WorkspaceContentProps> = ({ lab, lastSubmission
   const [submissionId, setSubmissionId] = useState<string | null>(lastSubmission?.id ?? null);
   const runStatus = useRunStatus(submissionId);
 
-  // Пока проверка в очереди или идёт, новую отправку не принимаем
-  const isChecking = runStatus.run?.state === 'queued' || runStatus.run?.state === 'running';
-
   const handleSubmit = async () => {
     setIsSubmitting(true);
     setSubmitMessage(null);
@@ -248,7 +245,7 @@ const WorkspaceContent: React.FC<WorkspaceContentProps> = ({ lab, lastSubmission
               size="large"
               icon={<Play20Filled />}
               onClick={handleSubmit}
-              disabled={isSubmitting || isChecking || code.trim() === ''}
+              disabled={isSubmitting || code.trim() === ''}
             >
               {isSubmitting ? 'Отправляем...' : 'Отправить на проверку'}
             </Button>
