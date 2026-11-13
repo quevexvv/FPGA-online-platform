@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Button,
   makeStyles,
@@ -9,7 +9,7 @@ import {
   tokens,
 } from '@fluentui/react-components';
 import { Play20Filled } from '@fluentui/react-icons';
-import { Link, useParams } from 'react-router';
+import { Link, Navigate, useParams } from 'react-router';
 import { ApiError } from '@/api/client';
 import { submitSolution } from '@/api/submissions';
 import { useLab } from '@/hooks/useLab';
@@ -137,6 +137,27 @@ const useStyles = makeStyles({
 
 type EditorTab = 'code' | 'task';
 
+// Последняя открытая лабораторная: вкладка «Рабочее пространство» в шапке открывает её.
+// localStorage может быть недоступен (приватный режим, запрет в браузере), поэтому try/catch
+const LAST_LAB_KEY = 'workspace:lastLabId';
+
+function readLastLabId(): string | null {
+  try {
+    return localStorage.getItem(LAST_LAB_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveLastLabId(labId: string | null) {
+  try {
+    if (labId) localStorage.setItem(LAST_LAB_KEY, labId);
+    else localStorage.removeItem(LAST_LAB_KEY);
+  } catch {
+    // Не получилось запомнить — не страшно, вкладка просто предложит выбрать лабораторную
+  }
+}
+
 // Время от сервера в UTC показываем в часовом поясе пользователя
 function formatTime(isoDate: string): string {
   return new Date(isoDate).toLocaleString('ru-RU', {
@@ -169,6 +190,11 @@ const WorkspaceContent: React.FC<WorkspaceContentProps> = ({ lab, lastSubmission
   // Последняя отправка: за её проверкой и следим
   const [submissionId, setSubmissionId] = useState<string | null>(lastSubmission?.id ?? null);
   const runStatus = useRunStatus(submissionId);
+
+  // Запоминаем лабораторную, чтобы в следующий раз вкладка в шапке открыла её
+  useEffect(() => {
+    saveLastLabId(lab.id);
+  }, [lab.id]);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -274,8 +300,16 @@ export const WorkspacePage: React.FC = () => {
   const { lab, error, isNotFound, retry } = useLab(labId);
   const latest = useLatestSubmission(labId);
 
-  // Рабочее пространство открыли из шапки, без выбранной лабораторной
+  // Запомненной лабораторной больше нет — забываем её, чтобы вкладка не вела на «не найдена»
+  useEffect(() => {
+    if (isNotFound && labId === readLastLabId()) saveLastLabId(null);
+  }, [isNotFound, labId]);
+
+  // Рабочее пространство открыли из шапки, без лабораторной в адресе
   if (!labId) {
+    const lastLabId = readLastLabId();
+    // replace: адрес /workspace не остаётся в истории, и «назад» не вернёт сюда снова
+    if (lastLabId) return <Navigate to={`/workspace/${lastLabId}`} replace />;
     return (
       <div className={styles.stateMessage}>
         Выберите лабораторную, чтобы начать работу
