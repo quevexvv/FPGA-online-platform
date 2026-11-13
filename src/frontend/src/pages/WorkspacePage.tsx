@@ -13,12 +13,13 @@ import { Link, useParams } from 'react-router';
 import { ApiError } from '@/api/client';
 import { submitSolution } from '@/api/submissions';
 import { useLab } from '@/hooks/useLab';
+import { useLatestSubmission } from '@/hooks/useLatestSubmission';
 import { useRunStatus } from '@/hooks/useRunStatus';
 import { CodeEditor } from '@/components/workspace/CodeEditor';
 import { RunLog } from '@/components/workspace/RunLog';
 import { RunSteps } from '@/components/workspace/RunSteps';
 import { getStepStates } from '@/components/workspace/runProgress';
-import { LabDetail } from '@/types';
+import { LabDetail, SubmissionDetail } from '@/types';
 import boardImage from '@/assets/fpga-board.svg';
 
 const useStyles = makeStyles({
@@ -136,18 +137,37 @@ const useStyles = makeStyles({
 
 type EditorTab = 'code' | 'task';
 
+// Время от сервера в UTC показываем в часовом поясе пользователя
+function formatTime(isoDate: string): string {
+  return new Date(isoDate).toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+interface WorkspaceContentProps {
+  lab: LabDetail;
+  // Последнее отправленное решение, если оно есть: с него и продолжаем
+  lastSubmission: SubmissionDetail | null;
+}
+
 // Рабочее пространство для уже загруженной лабораторной
-const WorkspaceContent: React.FC<{ lab: LabDetail }> = ({ lab }) => {
+const WorkspaceContent: React.FC<WorkspaceContentProps> = ({ lab, lastSubmission }) => {
   const styles = useStyles();
   const [tab, setTab] = useState<EditorTab>('code');
-  // Студент начинает с шаблона, который дал преподаватель
+  // Продолжаем с последнего отправленного кода, а если отправок не было — с шаблона
+  const initialCode = lastSubmission?.source_code ?? lab.template;
   const [code, setCode] = useState(lab.template);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitMessage, setSubmitMessage] = useState<string | null>(null);
+  const [submitMessage, setSubmitMessage] = useState<string | null>(
+    lastSubmission ? `Последняя отправка: ${formatTime(lastSubmission.created_at)}` : null,
+  );
   const [submitError, setSubmitError] = useState<string | null>(null);
   // Последняя отправка: за её проверкой и следим
-  const [submissionId, setSubmissionId] = useState<string | null>(null);
+  const [submissionId, setSubmissionId] = useState<string | null>(lastSubmission?.id ?? null);
   const runStatus = useRunStatus(submissionId);
 
   // Пока проверка в очереди или идёт, новую отправку не принимаем
@@ -195,7 +215,7 @@ const WorkspaceContent: React.FC<{ lab: LabDetail }> = ({ lab }) => {
         {/* Редактор только прячем, а не убираем: так не теряются курсор и история отмены */}
         <div className={tab === 'code' ? styles.editorWrapper : styles.hidden}>
           <CodeEditor
-            initialValue={lab.template}
+            initialValue={initialCode}
             onChange={setCode}
             ariaLabel="Код решения на Verilog"
           />
@@ -255,6 +275,7 @@ export const WorkspacePage: React.FC = () => {
   // id лабораторной берётся из адреса: /workspace/:labId
   const { labId } = useParams();
   const { lab, error, isNotFound, retry } = useLab(labId);
+  const latest = useLatestSubmission(labId);
 
   // Рабочее пространство открыли из шапки, без выбранной лабораторной
   if (!labId) {
@@ -281,7 +302,8 @@ export const WorkspacePage: React.FC = () => {
     );
   }
 
-  if (lab === null) {
+  // Ждём и задание, и последнюю отправку: от неё зависит, с какого кода начать
+  if (lab === null || !latest.isLoaded) {
     return (
       <div className={styles.stateMessage}>
         <Spinner label="Загружаем задание..." />
@@ -289,6 +311,6 @@ export const WorkspacePage: React.FC = () => {
     );
   }
 
-  // key: при переходе к другой лабораторной содержимое создаётся заново с её шаблоном
-  return <WorkspaceContent key={lab.id} lab={lab} />;
+  // key: при переходе к другой лабораторной содержимое создаётся заново
+  return <WorkspaceContent key={lab.id} lab={lab} lastSubmission={latest.submission} />;
 };

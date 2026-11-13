@@ -55,6 +55,11 @@ export interface SubmissionSummary {
   created_at: string; // дата и время в UTC, например '2026-11-12T16:03:38Z'
 }
 
+// Отправленное решение вместе с кодом (GET /submissions/{id})
+export interface SubmissionDetail extends SubmissionSummary {
+  source_code: string;
+}
+
 // Статус проверки решения (GET /submissions/{id}/run).
 // Имена полей как в ответе сервера
 export type RunState = 'not_started' | 'queued' | 'running' | 'finished';
