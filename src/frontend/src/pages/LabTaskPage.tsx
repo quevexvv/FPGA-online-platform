@@ -5,6 +5,8 @@ import { getLab } from '../api/labs';
 import { submitSolution } from '../api/submissions';
 import { ApiError } from '../api/client';
 import { LabDetail } from '../types';
+import { useRunStatus } from '../hooks/useRunStatus';
+import { RunStatusPanel } from '../components/labs/RunStatusPanel';
 
 const useStyles = makeStyles({
   pageContainer: {
@@ -107,6 +109,10 @@ export const LabTaskPage: React.FC = () => {
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // Последняя отправка в этом окне: за её проверкой и следим
+  const [submissionId, setSubmissionId] = useState<string | null>(null);
+  const runStatus = useRunStatus(submissionId);
+
   useEffect(() => {
     if (!labId) return;
 
@@ -123,6 +129,7 @@ export const LabTaskPage: React.FC = () => {
         setCode(data.template);
         setSubmitMessage(null);
         setSubmitError(null);
+        setSubmissionId(null);
       })
       .catch((err) => {
         if (ignore) return;
@@ -152,6 +159,7 @@ export const LabTaskPage: React.FC = () => {
         minute: '2-digit',
       });
       setSubmitMessage(`Решение отправлено в ${time}`);
+      setSubmissionId(submission.id);
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) {
         setSubmitError('Отправлять решения могут только студенты');
@@ -227,6 +235,13 @@ export const LabTaskPage: React.FC = () => {
                 </span>
               )}
             </div>
+            {submissionId && (
+              <RunStatusPanel
+                run={runStatus.run}
+                isConnectionLost={runStatus.isConnectionLost}
+                error={runStatus.error}
+              />
+            )}
           </>
         )}
       </div>
