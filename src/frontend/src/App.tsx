@@ -57,6 +57,7 @@ export const App: React.FC = () => {
               <Route path="/labs" element={<LabsPage />} />
               <Route path="/labs/:labId" element={<LabTaskPage />} />
               <Route path="/workspace" element={<WorkspacePage />} />
+              <Route path="/workspace/:labId" element={<WorkspacePage />} />
               <Route path="/booking" element={<BookingPage />} />
               <Route path="/history" element={<HistoryPage />} />
               {/* Любой неизвестный адрес ведёт к списку лабораторных */}
