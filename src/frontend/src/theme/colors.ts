@@ -37,6 +37,18 @@ export const lightPalette = {
   successBackground: 'rgba(15, 123, 61, 0.15)',
   warning: '#D97706',
   warningBackground: 'rgba(217, 119, 6, 0.15)',
+  // Терминал в рабочем пространстве
+  terminalBackground: '#EBEBEF',
+  terminalTitle: '#616161',
+  terminalInfo: '#0F7B3D',
+  terminalStatus: '#9C4A06',
+  terminalError: '#B91C1C',
+  // Шаги проверки
+  stepDone: '#129749',
+  stepCurrent: '#D97706',
+  stepPending: '#F0F0F4',
+  stepPendingText: '#616161',
+  stepLine: '#E1E1E6',
 };
 
 export const darkPalette = {
@@ -56,4 +68,16 @@ export const darkPalette = {
   successBackground: 'rgba(18, 151, 74, 0.2)',
   warning: '#D97706',
   warningBackground: 'rgba(217, 119, 6, 0.2)',
+  // Терминал в рабочем пространстве
+  terminalBackground: '#1E1E1E',
+  terminalTitle: '#919191',
+  terminalInfo: '#4EC9B0',
+  terminalStatus: '#D97706',
+  terminalError: '#F87171',
+  // Шаги проверки
+  stepDone: '#129749',
+  stepCurrent: '#D97706',
+  stepPending: '#3A3A40',
+  stepPendingText: '#A0A0A8',
+  stepLine: '#494950',
 };

@@ -25,12 +25,34 @@ const paletteTokens = (palette: Palette): Partial<Theme> => ({
   colorStatusWarningBackground1: palette.warningBackground,
 });
 
+// Свои токены приложения, которых нет во Fluent. FluentProvider превращает каждое поле темы
+// в CSS-переменную (--terminalBackground и т. д.), поэтому они переключаются вместе с темой
+const appTokenValues = (palette: Palette) => ({
+  terminalBackground: palette.terminalBackground,
+  terminalTitle: palette.terminalTitle,
+  terminalInfo: palette.terminalInfo,
+  terminalStatus: palette.terminalStatus,
+  terminalError: palette.terminalError,
+  stepDone: palette.stepDone,
+  stepCurrent: palette.stepCurrent,
+  stepPending: palette.stepPending,
+  stepPendingText: palette.stepPendingText,
+  stepLine: palette.stepLine,
+});
+
+// Ссылки на эти переменные для стилей, по аналогии с tokens из Fluent: appTokens.terminalInfo
+export const appTokens = Object.fromEntries(
+  Object.keys(appTokenValues(lightPalette)).map((name) => [name, `var(--${name})`]),
+) as Record<keyof ReturnType<typeof appTokenValues>, string>;
+
 export const customLightTheme: Theme = {
   ...createLightTheme(greenBrand),
   ...paletteTokens(lightPalette),
+  ...appTokenValues(lightPalette),
 };
 
 export const customDarkTheme: Theme = {
   ...createDarkTheme(greenBrand),
   ...paletteTokens(darkPalette),
+  ...appTokenValues(darkPalette),
 };
