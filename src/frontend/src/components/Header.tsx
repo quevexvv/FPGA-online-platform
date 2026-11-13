@@ -19,10 +19,19 @@ const useStyles = makeStyles({
     borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
     flexShrink: 0,
   },
+  // Имя и группа друг под другом
+  userInfo: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
   userText: {
     fontSize: '15px',
     fontWeight: '600',
     color: tokens.colorNeutralForeground1,
+  },
+  groupText: {
+    fontSize: '12px',
+    color: tokens.colorNeutralForeground2,
   },
   navContainer: {
     display: 'flex',
@@ -76,7 +85,11 @@ export const Header: React.FC<HeaderProps> = ({ isDarkMode, onThemeToggle }) => 
 
   return (
     <header className={styles.header}>
-      <div className={styles.userText}>{user?.full_name}</div>
+      <div className={styles.userInfo}>
+        <span className={styles.userText}>{user?.full_name}</span>
+        {/* Группы может не быть: у преподавателя или если студент её не указал */}
+        {user?.group && <span className={styles.groupText}>{user.group}</span>}
+      </div>
       
       {/* Навигация сразу после имени */}
       <nav className={styles.navContainer}>
