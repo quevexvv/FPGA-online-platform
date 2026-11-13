@@ -11,7 +11,8 @@ import { NavLink } from 'react-router';
 const useStyles = makeStyles({
   header: {
     height: '64px',
-    padding: '0 32px',
+    // На узком экране боковые отступы уменьшаются с 32px до 16px
+    padding: '0 clamp(16px, 2.5vw, 32px)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -23,6 +24,9 @@ const useStyles = makeStyles({
   userInfo: {
     display: 'flex',
     flexDirection: 'column',
+    // Имя не сжимается и не переносится на вторую строку
+    flexShrink: 0,
+    whiteSpace: 'nowrap',
   },
   userText: {
     fontSize: '15px',
@@ -35,8 +39,13 @@ const useStyles = makeStyles({
   },
   navContainer: {
     display: 'flex',
-    gap: '40px',
-    marginLeft: '72px',
+    // Расстояния «резиновые»: от 40px на широком экране до 16px на узком
+    gap: 'clamp(16px, 2.5vw, 40px)',
+    marginLeft: 'clamp(24px, 4vw, 72px)',
+    // Если места не хватит даже так, вкладки прокручиваются, а не переносятся
+    minWidth: 0,
+    overflowX: 'auto',
+    scrollbarWidth: 'thin',
     // auto забирает всё свободное место и отодвигает кнопку темы к правому краю
     marginRight: 'auto',
   },
@@ -46,6 +55,7 @@ const useStyles = makeStyles({
     fontSize: '15px',
     fontWeight: '500',
     padding: '4px 0',
+    whiteSpace: 'nowrap',
     transition: 'color 0.2s',
   },
   navLinkActive: {
@@ -60,6 +70,8 @@ const useStyles = makeStyles({
   },
   rightSection: {
     display: 'flex',
+    flexShrink: 0,
+    marginLeft: '16px',
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: '8px',
