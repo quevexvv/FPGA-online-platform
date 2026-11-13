@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.modules.auth.router import get_current_user, require_csrf
+from app.modules.runs.schemas import RunPublic
+from app.modules.runs.service import get_run
 from app.modules.submissions import service
 from app.modules.submissions.schemas import SubmissionCreate, SubmissionDetail, SubmissionSummary
 from app.modules.users.models import User
@@ -17,6 +19,15 @@ router = APIRouter(
 )
 Db = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+@router.get(
+    "/submissions/{submission_id}/run",
+    response_model=RunPublic,
+    responses={404: {"description": "Submission missing or owned by another user"}},
+)
+def submission_run(submission_id: UUID, user: CurrentUser, db: Db):
+    return get_run(db, user.id, submission_id)
 
 
 @router.post(
