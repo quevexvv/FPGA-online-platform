@@ -45,6 +45,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 };
 
 // Хук для компонентов: const { user, signOut } = useAuth();
+// Быстрое обновление (Fast Refresh) не умеет обновлять файл, где рядом с компонентом
+// экспортируется хук, и просто перезагрузит страницу. Для одного файла это приемлемо
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = (): AuthContextValue => {
   const context = useContext(AuthContext);
   if (!context) {

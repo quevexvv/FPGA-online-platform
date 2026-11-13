@@ -148,9 +148,7 @@ export const LabsPage: React.FC = () => {
   useEffect(() => {
     // Если пользователь ушёл со страницы до ответа сервера, ответ игнорируем
     let ignore = false;
-    setLabs(null);
-    setError(null);
-
+    
     getLabs()
       .then((data) => {
         if (!ignore) setLabs(data.map(toLabItem));
@@ -163,6 +161,12 @@ export const LabsPage: React.FC = () => {
       ignore = true;
     };
   }, [reloadCount]);
+
+  // Повтор: сбрасываем ошибку (появится загрузка) и запускаем эффект заново
+  const handleRetry = () => {
+    setError(null);
+    setReloadCount((count) => count + 1);
+  };
 
   // Колонки таблицы: подпись и доля ширины (в сумме 100%)
   const columns = [
@@ -184,7 +188,7 @@ export const LabsPage: React.FC = () => {
         {error ? (
           <div className={styles.stateMessage} role="alert">
             {error}
-            <Button onClick={() => setReloadCount((count) => count + 1)}>Повторить</Button>
+            <Button onClick={handleRetry}>Повторить</Button>
           </div>
         ) : labs === null ? (
           <div className={styles.stateMessage}>
