@@ -41,6 +41,7 @@ export interface User { // Поля в точности как в ответе �
   id: string;
   email: string;
   full_name: string;
+  group: string | null; // учебная группа, например '8К51Т13'; у преподавателя null
   role: UserRole;
   is_active: boolean;
   created_at: string; // дата и время в формате ISO (2026-11-11T22:03:20Z)
