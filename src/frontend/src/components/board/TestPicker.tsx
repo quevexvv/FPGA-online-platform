@@ -12,7 +12,7 @@ const useStyles = makeStyles({
     gap: '8px',
   },
   passed: { color: appTokens.stepDone },
-  failed: { color: appTokens.terminalError },
+  failed: { color: appTokens.stepFailed },
 });
 
 interface TestPickerProps {
