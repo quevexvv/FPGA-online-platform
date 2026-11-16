@@ -38,6 +38,12 @@ fi
 ) </dev/null >"$job/manager.log" 2>&1 &
 MANAGER
 chmod +x -- "$root/bin/systemd-run"
+cat > "$root/bin/systemctl" <<'STATUS'
+#!/usr/bin/env bash
+[[ $# == 5 && $1 == --user && $2 == show && $3 == --property=ActiveState && $4 == --value ]] || exit 2
+printf '%s\n' active
+STATUS
+chmod +x -- "$root/bin/systemctl"
 cat > "$root/bin/rm" <<'CLEANUP'
 #!/usr/bin/env bash
 set -euo pipefail

@@ -100,7 +100,7 @@ case $(< scenario) in
         ;;
     hold)
         trap '' TERM
-        setsid /bin/bash -c 'trap "" TERM; echo "$$" > escaped; exec sleep 30' &
+        setsid /bin/bash -c 'trap "" TERM; echo "$$"; echo "$$" > escaped; exec sleep 30' &
         wait
         ;;
 esac
@@ -147,6 +147,7 @@ for _ in {1..200}; do
     sleep .01
 done
 [[ -s $running_project/escaped ]]
+escaped_pid=$(<"$running_project/escaped")
 bin/fpga-dispatch status --run-id "$holding" |
     jq -e '.state == "running" and .stage == "building"' >/dev/null
 prepare_build 11 ok
@@ -158,14 +159,15 @@ wait "$active"
 active=
 check_result "$holding" internal_error
 check_code "$holding" interrupted
-! kill -0 "$(<"$running_project/escaped")" 2>/dev/null || exit 1
+! kill -0 "$escaped_pid" 2>/dev/null || exit 1
+[[ ! -e $runs/$holding/work ]]
 flock -n "$runs/.stand.lock" true
 
 prepare_build 12 ok
 run "$id" hardware
 check_result "$id" board_error
 check_code "$id" uart_not_ready
-[[ -s $project/output_files/job.sof ]]
+[[ ! -e $runs/$id/work ]]
 grep -Fxq 'quartus started' "$runs/$id/output/logs/build.log"
 grep -Fxq 'programmer started' "$runs/$id/output/logs/program.log"
 grep -q 'transport:open' "$runs/$id/output/logs/uart.log"
@@ -187,7 +189,7 @@ echo 'stale' > "$project/output_files/job.sof"
 run "$id" hardware
 check_result "$id" build_error
 check_code "$id" output_exists
-grep -Fxq 'stale' "$project/output_files/job.sof"
+[[ ! -e $runs/$id/work ]]
 [[ ! -e $runs/$id/output/logs/build.log ]]
 
 config 1000
@@ -195,8 +197,9 @@ prepare_build 17 hold
 run "$id" hardware
 check_result "$id" build_error
 check_code "$id" build_timeout
-[[ -s $project/escaped ]]
-! kill -0 "$(<"$project/escaped")" 2>/dev/null || exit 1
+escaped_pid=$(sed -n '2p' "$runs/$id/output/logs/build.log")
+[[ $escaped_pid =~ ^[0-9]+$ ]]
+! kill -0 "$escaped_pid" 2>/dev/null || exit 1
 flock -n "$runs/.stand.lock" true
 echo 'PASS: Quartus stage, active stand lock, failure, timeout and stale artifact'
 

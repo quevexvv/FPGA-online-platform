@@ -26,6 +26,7 @@ test: all build/test-uart-peer
 	@bash tests/runner.sh
 	@bash tests/mock.sh
 	@bash tests/launch.sh
+	@bash tests/lifecycle.sh
 	@bash tests/stage.sh
 	@bash tests/contract.sh
 	@bash tests/analyst-contract.sh

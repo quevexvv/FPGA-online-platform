@@ -17,9 +17,6 @@ fail() {
     exit "$1"
 }
 
-safe_dir() { [[ -d $1 && ! -L $1 ]]; }
-safe_file() { [[ -f $1 && ! -L $1 ]]; }
-
 [[ $# -eq 6 && $1 == --job && $3 == --output && $5 == --mode &&
     ( $6 == hardware || $6 == mock ) ]] || fail 2 'expected --job, --output and --mode'
 mode=$6
@@ -31,6 +28,9 @@ id=${id##*/}
 root=$(cd -- "$FPGA_JOBS_ROOT" && pwd -P)
 [[ $root != / ]] || fail 1 'FPGA_JOBS_ROOT must be dedicated to jobs'
 umask 077
+project=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+# shellcheck source=scripts/run-state.sh
+source "$project/scripts/run-state.sh"
 runs=$root/runs
 run=$runs/$id
 output=$run/output
@@ -38,13 +38,17 @@ control=$run/control
 work=$run/work
 id_lock_path=$runs/.locks/$id
 [[ $2 == "$run/input" && $4 == "$output" ]] || fail 2 'paths must belong to the registered run'
-for directory in "$runs" "$runs/.locks" "$run" "$run/input" "$work" "$output" "$output/logs" "$control"; do
+for directory in "$runs" "$runs/.locks"; do
     safe_dir "$directory" || fail 2 'run directories are missing or unsafe'
 done
 safe_file "$id_lock_path" || fail 2 'run_id is not registered'
 exec {id_lock}>> "$id_lock_path"
 flock -x "$id_lock"
 
+for directory in "$run" "$run/input" "$work" "$output" "$output/logs" "$control"; do
+    safe_dir "$directory" || fail 2 'run directories are missing or unsafe'
+done
+! exists "$control/cleaned.json" || fail 2 'run has been cleaned'
 if ! safe_file "$control/registration.json" || ! safe_file "$output/status.json"; then
     fail 2 'registration is missing or unsafe'
 fi
@@ -56,19 +60,19 @@ jq -es --arg id "$id" --arg mode "$mode" '
                      .state == "starting" and .stage == "dispatch")
 ' "$output/status.json" >/dev/null || fail 2 'run is not waiting to start'
 [[ ! -e $output/result.json && ! -L $output/result.json ]] || fail 2 'run already has a result'
+optional_file "$control/activity.lock" || fail 2 'unsafe activity lock'
+exec {activity_lock}>> "$control/activity.lock"
+flock -n "$activity_lock" || fail 2 'run is still active'
 mkdir -- "$control/started" 2>/dev/null || fail 2 'run cannot be started again'
-# Release the ID lock so status can be read while the stand is busy.
+# The activity lock stays open through result publication and all child processes.
 exec {id_lock}>&-
-
-project=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
-# shellcheck source=scripts/run-state.sh
-source "$project/scripts/run-state.sh"
 
 started_at=
 planned=0
 comparison=/dev/null
 finish_run() {
     publish_run_result "$output" "$id" "$mode" "$started_at" "$1" "$2" "$3" "$4" "$planned" "$comparison"
+    remove_run_payload "$work" || printf '%s\n' 'fpga-run: work cleanup failed' >&2
     exit 0
 }
 
