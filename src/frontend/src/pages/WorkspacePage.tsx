@@ -180,7 +180,7 @@ const WorkspaceContent: React.FC<WorkspaceContentProps> = ({ lab, lastSubmission
   const [tab, setTab] = useState<EditorTab>('code');
   // Продолжаем с последнего отправленного кода, а если отправок не было — с шаблона
   const initialCode = lastSubmission?.source_code ?? lab.template;
-  const [code, setCode] = useState(lab.template);
+  const [code, setCode] = useState(initialCode);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<string | null>(
