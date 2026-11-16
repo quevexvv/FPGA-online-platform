@@ -76,7 +76,7 @@ function buildLines(
       for (const test of run.tests) {
         lines.push({
           kind: test.match ? 'info' : 'error',
-          text: `Тест ${test.vector_index}: din = ${test.din}, получено ${test.dout}, ожидалось ${test.expected_dout}`,
+          text: `Тест ${test.vector_index + 1}: din = ${test.din}, получено ${test.dout}, ожидалось ${test.expected_dout}`,
         });
       }
       if (run.mode === 'mock') {
