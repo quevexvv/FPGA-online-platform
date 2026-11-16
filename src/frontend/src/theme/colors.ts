@@ -46,6 +46,7 @@ export const lightPalette = {
   // Шаги проверки
   stepDone: '#129749',
   stepCurrent: '#D97706',
+  stepFailed: '#E10000',
   stepPending: '#F0F0F4',
   stepPendingText: '#616161',
   stepLine: '#E1E1E6',
@@ -77,6 +78,7 @@ export const darkPalette = {
   // Шаги проверки
   stepDone: '#129749',
   stepCurrent: '#D97706',
+  stepFailed: '#E53E3E',
   stepPending: '#3A3A40',
   stepPendingText: '#A0A0A8',
   stepLine: '#494950',

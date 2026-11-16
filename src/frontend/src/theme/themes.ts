@@ -35,6 +35,7 @@ const appTokenValues = (palette: Palette) => ({
   terminalError: palette.terminalError,
   stepDone: palette.stepDone,
   stepCurrent: palette.stepCurrent,
+  stepFailed: palette.stepFailed,
   stepPending: palette.stepPending,
   stepPendingText: palette.stepPendingText,
   stepLine: palette.stepLine,

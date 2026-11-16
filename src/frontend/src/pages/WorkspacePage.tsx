@@ -19,8 +19,10 @@ import { CodeEditor } from '@/components/workspace/CodeEditor';
 import { RunLog } from '@/components/workspace/RunLog';
 import { RunSteps } from '@/components/workspace/RunSteps';
 import { getStepStates } from '@/components/workspace/runProgress';
-import { LabDetail, SubmissionDetail } from '@/types';
-import boardImage from '@/assets/fpga-board.svg';
+import { FpgaBoard } from '@/components/board/FpgaBoard';
+import { TestPicker } from '@/components/board/TestPicker';
+import { boardStateFromTest, mismatchedLeds } from '@/components/board/boardLayout';
+import { LabDetail, RunTest, SubmissionDetail } from '@/types';
 
 const useStyles = makeStyles({
   // Две колонки: слева редактор, справа плата и проверка
@@ -53,14 +55,24 @@ const useStyles = makeStyles({
   boardCard: {
     flexShrink: 0,
     padding: '16px',
-    alignItems: 'center',
+    gap: '12px',
   },
-  boardImage: {
-    display: 'block',
-    width: '100%',
-    // Плата уменьшается вместе с окном, но не растягивается выше 360px
-    maxHeight: '360px',
-    objectFit: 'contain',
+  board: {
+    // Плата уменьшается вместе с окном, но не растягивается выше 300px
+    maxHeight: '300px',
+  },
+  // Кнопки тестов и подпись под платой, по центру, как и сама плата
+  boardFooter: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px 16px',
+  },
+  boardCaption: {
+    margin: 0,
+    fontSize: '13px',
+    color: tokens.colorNeutralForeground2,
   },
   checkCard: {
     flex: 1,
@@ -168,6 +180,14 @@ function formatTime(isoDate: string): string {
   });
 }
 
+// Подпись под кнопками тестов: что не совпало в выбранном тесте
+function testCaption(test: RunTest): string {
+  const mismatches = mismatchedLeds(boardStateFromTest(test));
+  const result =
+    mismatches.length > 0 ? `не совпали ${mismatches.join(', ')}` : 'все светодиоды как ожидалось';
+  return `din = ${test.din}, ${result}`;
+}
+
 interface WorkspaceContentProps {
   lab: LabDetail;
   // Последнее отправленное решение, если оно есть: с него и продолжаем
@@ -180,7 +200,7 @@ const WorkspaceContent: React.FC<WorkspaceContentProps> = ({ lab, lastSubmission
   const [tab, setTab] = useState<EditorTab>('code');
   // Продолжаем с последнего отправленного кода, а если отправок не было — с шаблона
   const initialCode = lastSubmission?.source_code ?? lab.template;
-  const [code, setCode] = useState(lab.template);
+  const [code, setCode] = useState(initialCode);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<string | null>(
@@ -190,6 +210,19 @@ const WorkspaceContent: React.FC<WorkspaceContentProps> = ({ lab, lastSubmission
   // Последняя отправка: за её проверкой и следим
   const [submissionId, setSubmissionId] = useState<string | null>(lastSubmission?.id ?? null);
   const runStatus = useRunStatus(submissionId);
+  const run = runStatus.run;
+
+  // Выбранный тест запоминаем вместе с id проверки: у новой проверки выбор сбросится сам
+  const [selectedTest, setSelectedTest] = useState<{ runId: string; index: number } | null>(null);
+  // Входы и выходы тестов известны только у завершённой проверки
+  const finishedRunId = run?.state === 'finished' ? run.run_id : null;
+  const tests = run?.state === 'finished' ? run.tests : [];
+  // Пока ничего не выбрали, показываем первый несовпавший тест: он важнее всего
+  const firstFailed = tests.findIndex((test) => !test.match);
+  const defaultIndex = firstFailed === -1 ? 0 : firstFailed;
+  const testIndex =
+    selectedTest && selectedTest.runId === finishedRunId ? selectedTest.index : defaultIndex;
+  const test = tests[testIndex] ?? null;
 
   // Запоминаем лабораторную, чтобы в следующий раз вкладка в шапке открыла её
   useEffect(() => {
@@ -257,7 +290,18 @@ const WorkspaceContent: React.FC<WorkspaceContentProps> = ({ lab, lastSubmission
       {/* Правая колонка: плата и проверка */}
       <div className={styles.rightColumn}>
         <section className={mergeClasses(styles.card, styles.boardCard)} aria-label="Плата">
-          <img className={styles.boardImage} src={boardImage} alt="Отладочная плата с ПЛИС" />
+          <FpgaBoard className={styles.board} state={test ? boardStateFromTest(test) : null} />
+          {/* Кнопки тестов появляются только после проверки, если есть открытые тесты */}
+          {finishedRunId && test && (
+            <div className={styles.boardFooter}>
+              <TestPicker
+                tests={tests}
+                selectedIndex={testIndex}
+                onSelect={(index) => setSelectedTest({ runId: finishedRunId, index })}
+              />
+              <p className={styles.boardCaption}>{testCaption(test)}</p>
+            </div>
+          )}
         </section>
 
         <section
@@ -276,12 +320,12 @@ const WorkspaceContent: React.FC<WorkspaceContentProps> = ({ lab, lastSubmission
               {isSubmitting ? 'Отправляем...' : 'Отправить на проверку'}
             </Button>
             <div className={styles.steps}>
-              <RunSteps states={getStepStates(runStatus.run)} />
+              <RunSteps states={getStepStates(run)} />
             </div>
           </div>
 
           <RunLog
-            run={runStatus.run}
+            run={run}
             submitMessage={submitMessage}
             submitError={submitError}
             isConnectionLost={runStatus.isConnectionLost}

@@ -40,6 +40,10 @@ const useStyles = makeStyles({
   stepReached: {
     '::before': { backgroundColor: appTokens.stepDone },
   },
+  // Линия до шага с ошибкой красная, как на макете
+  stepFailed: {
+    '::before': { backgroundColor: appTokens.stepFailed },
+  },
   circle: {
     gridRow: '2',
     position: 'relative',
@@ -74,7 +78,7 @@ const useStyles = makeStyles({
   },
   circleFailed: {
     color: tokens.colorNeutralForegroundOnBrand,
-    backgroundColor: appTokens.terminalError,
+    backgroundColor: appTokens.stepFailed,
   },
   label: {
     whiteSpace: 'nowrap',
@@ -86,7 +90,7 @@ const useStyles = makeStyles({
   labelBottom: { gridRow: '3' },
   labelDone: { color: tokens.colorNeutralForeground1 },
   labelCurrent: { color: appTokens.stepCurrent },
-  labelFailed: { color: appTokens.terminalError },
+  labelFailed: { color: appTokens.stepFailed },
 });
 
 interface RunStepsProps {
@@ -104,7 +108,11 @@ export const RunSteps: React.FC<RunStepsProps> = ({ states }) => {
         return (
           <li
             key={label}
-            className={mergeClasses(styles.step, state !== 'pending' && styles.stepReached)}
+            className={mergeClasses(
+              styles.step,
+              state !== 'pending' && styles.stepReached,
+              state === 'failed' && styles.stepFailed,
+            )}
             aria-current={state === 'current' ? 'step' : undefined}
           >
             <span
