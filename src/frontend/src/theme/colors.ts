@@ -54,7 +54,7 @@ export const lightPalette = {
 
 export const darkPalette = {
   bgWindow: '#1E1E22',
-  bgPanel: '#29292D',
+  bgPanel: '#252526',
   textMain: '#E3E3E6',
   textSecondary: '#919191',
   textAccent: '#A0AEC0',
