@@ -1,10 +1,20 @@
 import React, { useState } from 'react';
-import { Button, makeStyles, Spinner, tokens } from '@fluentui/react-components';
+import {
+  Button,
+  makeStyles,
+  mergeClasses,
+  Spinner,
+  Tab,
+  TabList,
+  tokens,
+} from '@fluentui/react-components';
 import { Link, useParams } from 'react-router';
 import { useRunStatus } from '@/hooks/useRunStatus';
 import { useSubmission } from '@/hooks/useSubmission';
+import { CodeEditor } from '@/components/workspace/CodeEditor';
 import { OpenTestsTable } from '@/components/report/OpenTestsTable';
 import { ReportBoard } from '@/components/report/ReportBoard';
+import { ReportConsole } from '@/components/report/ReportConsole';
 import { ReportSummary } from '@/components/report/ReportSummary';
 
 const useStyles = makeStyles({
@@ -52,16 +62,20 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     minWidth: 0,
   },
-  // Слева таблица, справа плата. На узком экране друг под другом
+  // Слева таблица и консоль, справа плата на всю высоту
   grid: {
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-    alignItems: 'start',
+    gridTemplateAreas: '"tests board" "console board"',
     gap: '24px',
     '@media (max-width: 1100px)': {
       gridTemplateColumns: 'minmax(0, 1fr)',
+      gridTemplateAreas: '"tests" "board" "console"',
     },
   },
+  tests: { gridArea: 'tests' },
+  board: { gridArea: 'board' },
+  console: { gridArea: 'console' },
   cardHeader: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -85,6 +99,11 @@ const useStyles = makeStyles({
     fontSize: '14px',
     color: tokens.colorNeutralForeground2,
   },
+  codeCard: {
+    height: '560px',
+    padding: 0,
+    overflow: 'hidden',
+  },
   stateMessage: {
     height: '100%',
     display: 'flex',
@@ -97,6 +116,8 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorNeutralBackground2,
   },
 });
+
+type ReportTab = 'report' | 'code';
 
 // Дата и время отправки: «23.10.2026, 14:10»
 function formatDateTime(isoDate: string): string {
@@ -116,6 +137,7 @@ export const ReportPage: React.FC = () => {
   const { submission, lab, error, isNotFound, retry } = useSubmission(submissionId);
   // Тот же хук, что в рабочем пространстве: если проверка ещё идёт, отчёт обновится сам
   const { run } = useRunStatus(submissionId ?? null);
+  const [tab, setTab] = useState<ReportTab>('report');
   // Выбранный тест. Пока не выбран, показываем первый непройденный
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
@@ -170,29 +192,50 @@ export const ReportPage: React.FC = () => {
 
       <ReportSummary run={run} />
 
-      <div className={styles.grid}>
-        <section className={styles.card} aria-labelledby="report-tests-title">
-          <div className={styles.cardHeader}>
-            <h2 id="report-tests-title" className={styles.cardTitle}>
-              Открытые примеры
-            </h2>
-            {tests.length > 0 && (
-              <span className={styles.hint}>Выберите строку, чтобы увидеть её на плате</span>
-            )}
-          </div>
-          {tests.length > 0 ? (
-            <OpenTestsTable tests={tests} selectedIndex={testIndex} onSelect={setSelectedIndex} />
-          ) : (
-            <p className={styles.empty}>
-              {run?.state === 'finished'
-                ? 'Открытые примеры не запускались'
-                : 'Появятся, когда проверка закончится'}
-            </p>
-          )}
-        </section>
+      <TabList selectedValue={tab} onTabSelect={(_, data) => setTab(data.value as ReportTab)}>
+        <Tab value="report">Отчёт</Tab>
+        <Tab value="code">Код попытки</Tab>
+      </TabList>
 
-        <ReportBoard className={styles.card} run={run} test={test} />
-      </div>
+      {tab === 'report' && (
+        <div className={styles.grid}>
+          <section
+            className={mergeClasses(styles.card, styles.tests)}
+            aria-labelledby="report-tests-title"
+          >
+            <div className={styles.cardHeader}>
+              <h2 id="report-tests-title" className={styles.cardTitle}>
+                Открытые примеры
+              </h2>
+              {tests.length > 0 && (
+                <span className={styles.hint}>Выберите строку, чтобы увидеть её на плате</span>
+              )}
+            </div>
+            {tests.length > 0 ? (
+              <OpenTestsTable tests={tests} selectedIndex={testIndex} onSelect={setSelectedIndex} />
+            ) : (
+              <p className={styles.empty}>
+                {run?.state === 'finished'
+                  ? 'Открытые примеры не запускались'
+                  : 'Появятся, когда проверка закончится'}
+              </p>
+            )}
+          </section>
+
+          <ReportBoard className={mergeClasses(styles.card, styles.board)} run={run} test={test} />
+          <ReportConsole className={mergeClasses(styles.card, styles.console)} run={run} />
+        </div>
+      )}
+
+      {tab === 'code' && (
+        <section className={mergeClasses(styles.card, styles.codeCard)} aria-label="Код попытки">
+          <CodeEditor
+            initialValue={submission.source_code}
+            ariaLabel="Код отправленного решения, только чтение"
+            readOnly
+          />
+        </section>
+      )}
     </div>
   );
 };
