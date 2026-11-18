@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button, makeStyles, Spinner, tokens } from '@fluentui/react-components';
 import { Link, useParams } from 'react-router';
 import { useRunStatus } from '@/hooks/useRunStatus';
 import { useSubmission } from '@/hooks/useSubmission';
+import { OpenTestsTable } from '@/components/report/OpenTestsTable';
+import { ReportBoard } from '@/components/report/ReportBoard';
 import { ReportSummary } from '@/components/report/ReportSummary';
 
 const useStyles = makeStyles({
@@ -40,6 +42,49 @@ const useStyles = makeStyles({
     textDecoration: 'none',
     ':hover': { textDecoration: 'underline' },
   },
+  card: {
+    boxSizing: 'border-box',
+    padding: '24px 28px',
+    backgroundColor: tokens.colorNeutralBackground1,
+    borderRadius: tokens.borderRadiusXLarge,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    display: 'flex',
+    flexDirection: 'column',
+    minWidth: 0,
+  },
+  // Слева таблица, справа плата. На узком экране друг под другом
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+    alignItems: 'start',
+    gap: '24px',
+    '@media (max-width: 1100px)': {
+      gridTemplateColumns: 'minmax(0, 1fr)',
+    },
+  },
+  cardHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+    gap: '8px 16px',
+    marginBottom: '16px',
+  },
+  cardTitle: {
+    margin: 0,
+    fontSize: '16px',
+    fontWeight: '700',
+    color: tokens.colorNeutralForeground1,
+  },
+  hint: {
+    fontSize: '12px',
+    color: tokens.colorNeutralForeground2,
+  },
+  empty: {
+    margin: 0,
+    fontSize: '14px',
+    color: tokens.colorNeutralForeground2,
+  },
   stateMessage: {
     height: '100%',
     display: 'flex',
@@ -71,6 +116,8 @@ export const ReportPage: React.FC = () => {
   const { submission, lab, error, isNotFound, retry } = useSubmission(submissionId);
   // Тот же хук, что в рабочем пространстве: если проверка ещё идёт, отчёт обновится сам
   const { run } = useRunStatus(submissionId ?? null);
+  // Выбранный тест. Пока не выбран, показываем первый непройденный
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   if (isNotFound) {
     return (
@@ -98,6 +145,11 @@ export const ReportPage: React.FC = () => {
     );
   }
 
+  const tests = run?.state === 'finished' ? run.tests : [];
+  const firstFailed = tests.findIndex((test) => !test.match);
+  const testIndex = selectedIndex ?? (firstFailed === -1 ? 0 : firstFailed);
+  const test = tests[testIndex] ?? null;
+
   return (
     <div className={styles.page}>
       <div className={styles.topRow}>
@@ -117,6 +169,30 @@ export const ReportPage: React.FC = () => {
       </div>
 
       <ReportSummary run={run} />
+
+      <div className={styles.grid}>
+        <section className={styles.card} aria-labelledby="report-tests-title">
+          <div className={styles.cardHeader}>
+            <h2 id="report-tests-title" className={styles.cardTitle}>
+              Открытые примеры
+            </h2>
+            {tests.length > 0 && (
+              <span className={styles.hint}>Выберите строку, чтобы увидеть её на плате</span>
+            )}
+          </div>
+          {tests.length > 0 ? (
+            <OpenTestsTable tests={tests} selectedIndex={testIndex} onSelect={setSelectedIndex} />
+          ) : (
+            <p className={styles.empty}>
+              {run?.state === 'finished'
+                ? 'Открытые примеры не запускались'
+                : 'Появятся, когда проверка закончится'}
+            </p>
+          )}
+        </section>
+
+        <ReportBoard className={styles.card} run={run} test={test} />
+      </div>
     </div>
   );
 };

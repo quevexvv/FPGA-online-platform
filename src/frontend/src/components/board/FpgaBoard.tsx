@@ -8,19 +8,13 @@ import {
   isBitSet,
   isLedMismatch,
   LedPin,
+  ledColors,
   leds,
+  MISMATCH_COLOR,
   mismatchedLeds,
   SwitchPin,
   switches,
 } from './boardLayout';
-
-// Цвета — это цвета настоящей платы, а не интерфейса, поэтому от темы они не зависят
-const ledColors = {
-  red: { on: '#FF4A3D', off: '#5C2A2E' },
-  green: { on: '#3DDC84', off: '#1F4A35' },
-};
-// Рамка несовпадения жёлтая: так её не спутать ни с красным, ни с зелёным светодиодом
-const MISMATCH_COLOR = '#FFC83D';
 
 // Верх светодиодов и переключателей на картинке
 const LED_Y = 370;

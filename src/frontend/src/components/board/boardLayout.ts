@@ -5,6 +5,15 @@ import { RunTest } from '@/types';
 export const BOARD_WIDTH = 652;
 export const BOARD_HEIGHT = 455;
 
+// Цвета настоящей платы, а не интерфейса, поэтому от темы они не зависят.
+// Нужны плате и легенде под ней в отчёте
+export const ledColors = {
+  red: { on: '#FF4A3D', off: '#5C2A2E' },
+  green: { on: '#3DDC84', off: '#1F4A35' },
+};
+// Рамка несовпадения жёлтая: так её не спутать ни с красным, ни с зелёным светодиодом
+export const MISMATCH_COLOR = '#FFC83D';
+
 // Светодиоды и переключатели стоят с шагом 32: центр первого на x = 54
 const FIRST_CENTER_X = 54;
 const STEP_X = 32;
