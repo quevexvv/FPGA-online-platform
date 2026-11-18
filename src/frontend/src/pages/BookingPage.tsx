@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Button, makeStyles, tokens } from '@fluentui/react-components';
+import { BookingDialog } from '@/components/booking/BookingDialog';
 import { SessionCard } from '@/components/booking/SessionCard';
 import { SlotGrid } from '@/components/booking/SlotGrid';
 import { slotLabel } from '@/components/booking/bookingTime';
@@ -44,6 +45,7 @@ export const BookingPage: React.FC = () => {
   // TODO: слоты и сессия пока ненастоящие, см. bookingMock.ts
   const [todaySlots] = useState(() => getMockSlots(new Date()));
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   const selectedSlot = todaySlots.find((slot) => slot.id === selectedId) ?? null;
@@ -53,6 +55,12 @@ export const BookingPage: React.FC = () => {
     if (selectedSlot) {
       setNotice(`Выбран слот ${slotLabel(selectedSlot)} на сегодня. Бронь заработает вместе с API`);
     }
+  };
+
+  const handleDialogConfirm = (date: Date, timeLabel: string) => {
+    const day = date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+    setNotice(`Выбрано время ${timeLabel}, ${day}. Бронь заработает вместе с API`);
+    setIsDialogOpen(false);
   };
 
   return (
@@ -75,12 +83,26 @@ export const BookingPage: React.FC = () => {
           >
             Забронировать слот
           </Button>
+          <Button
+            className={styles.actionButton}
+            appearance="primary"
+            size="large"
+            onClick={() => setIsDialogOpen(true)}
+          >
+            Выбрать другое время
+          </Button>
           {/* aria-live: скринридер прочитает сообщение, когда оно появится */}
           <p className={styles.notice} aria-live="polite">
             {notice}
           </p>
         </div>
       </section>
+
+      <BookingDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        onConfirm={handleDialogConfirm}
+      />
     </div>
   );
 };
