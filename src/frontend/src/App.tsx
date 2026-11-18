@@ -1,11 +1,10 @@
-import React, { lazy, Suspense, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { FluentProvider, makeStyles, Spinner, tokens } from '@fluentui/react-components';
 import { Navigate, Route, Routes } from 'react-router';
 import { customLightTheme, customDarkTheme } from '@/theme/themes';
 import { AuthPage } from '@/pages/AuthPage';
 import { Header } from '@/components/Header';
 import { LabsPage } from '@/pages/LabsPage';
-import { BookingPage } from '@/pages/BookingPage';
 import { HistoryPage } from '@/pages/HistoryPage';
 import { LabTaskPage } from '@/pages/LabTaskPage';
 import { useAuth } from '@/auth/AuthContext';
@@ -14,6 +13,11 @@ import { useAuth } from '@/auth/AuthContext';
 // Загружаем её отдельным файлом, только когда студент её открывает
 const WorkspacePage = lazy(() =>
   import('@/pages/WorkspacePage').then((module) => ({ default: module.WorkspacePage })),
+);
+
+// Бронь с календарём и диалоговым окном тоже грузим отдельно: она нужна не каждый раз
+const BookingPage = lazy(() =>
+  import('@/pages/BookingPage').then((module) => ({ default: module.BookingPage })),
 );
 
 const useStyles = makeStyles({
@@ -42,6 +46,12 @@ export const App: React.FC = () => {
   const styles = useStyles();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const { user, isLoading } = useAuth();
+
+  // Встроенные элементы браузера (полосы прокрутки, выбор времени) Fluent не красит.
+  // color-scheme подсказывает браузеру, в какой теме их рисовать
+  useEffect(() => {
+    document.documentElement.style.colorScheme = isDarkMode ? 'dark' : 'light';
+  }, [isDarkMode]);
 
   return (
     <FluentProvider theme={isDarkMode ? customDarkTheme : customLightTheme}>
