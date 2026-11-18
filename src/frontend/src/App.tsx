@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { FluentProvider, makeStyles, Spinner, tokens } from '@fluentui/react-components';
 import { Navigate, Route, Routes } from 'react-router';
 import { customLightTheme, customDarkTheme } from '@/theme/themes';
@@ -46,6 +46,12 @@ export const App: React.FC = () => {
   const styles = useStyles();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const { user, isLoading } = useAuth();
+
+  // Встроенные элементы браузера (полосы прокрутки, выбор времени) Fluent не красит.
+  // color-scheme подсказывает браузеру, в какой теме их рисовать
+  useEffect(() => {
+    document.documentElement.style.colorScheme = isDarkMode ? 'dark' : 'light';
+  }, [isDarkMode]);
 
   return (
     <FluentProvider theme={isDarkMode ? customDarkTheme : customLightTheme}>
