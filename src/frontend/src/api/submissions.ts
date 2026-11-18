@@ -15,6 +15,11 @@ export function getSubmissionRun(submissionId: string): Promise<RunStatus> {
   return apiRequest<RunStatus>(`/submissions/${encodeURIComponent(submissionId)}/run`);
 }
 
+// Одно отправленное решение вместе с кодом: для отчёта о проверке
+export function getSubmission(submissionId: string): Promise<SubmissionDetail> {
+  return apiRequest<SubmissionDetail>(`/submissions/${encodeURIComponent(submissionId)}`);
+}
+
 // Последнее отправленное решение по лабораторной вместе с кодом. null — ещё не отправляли
 export async function getLatestSubmission(labId: string): Promise<SubmissionDetail | null> {
   // Сервер отдаёт список от новых к старым, поэтому достаточно первой записи
@@ -22,5 +27,5 @@ export async function getLatestSubmission(labId: string): Promise<SubmissionDeta
     `/labs/${encodeURIComponent(labId)}/submissions?limit=1`,
   );
   if (list.length === 0) return null;
-  return apiRequest<SubmissionDetail>(`/submissions/${encodeURIComponent(list[0].id)}`);
+  return getSubmission(list[0].id);
 }

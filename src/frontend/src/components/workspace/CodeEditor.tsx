@@ -63,12 +63,19 @@ const useStyles = makeStyles({
 
 interface CodeEditorProps {
   initialValue: string; // текст при создании редактора
-  onChange: (value: string) => void;
+  onChange?: (value: string) => void;
   ariaLabel: string;
+  // Только просмотр: например, код старой попытки в отчёте
+  readOnly?: boolean;
 }
 
 // Редактор кода на CodeMirror 6 с подсветкой Verilog
-export const CodeEditor: React.FC<CodeEditorProps> = ({ initialValue, onChange, ariaLabel }) => {
+export const CodeEditor: React.FC<CodeEditorProps> = ({
+  initialValue,
+  onChange,
+  ariaLabel,
+  readOnly = false,
+}) => {
   const styles = useStyles();
   // div, внутрь которого CodeMirror нарисует редактор
   const containerRef = useRef<HTMLDivElement>(null);
@@ -97,9 +104,12 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({ initialValue, onChange, 
           indentUnit.of('    '),
           EditorState.tabSize.of(4),
           EditorView.contentAttributes.of({ 'aria-label': ariaLabel }),
+          // readOnly запрещает менять текст, editable(false) убирает курсор ввода
+          EditorState.readOnly.of(readOnly),
+          EditorView.editable.of(!readOnly),
           // Сообщаем родителю о каждом изменении текста
           EditorView.updateListener.of((update) => {
-            if (update.docChanged) onChangeRef.current(update.state.doc.toString());
+            if (update.docChanged) onChangeRef.current?.(update.state.doc.toString());
           }),
         ],
       }),
@@ -107,7 +117,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({ initialValue, onChange, 
 
     // Уходим со страницы — убираем редактор
     return () => view.destroy();
-  }, [initialValue, ariaLabel]);
+  }, [initialValue, ariaLabel, readOnly]);
 
   return <div ref={containerRef} className={styles.editor} />;
 };

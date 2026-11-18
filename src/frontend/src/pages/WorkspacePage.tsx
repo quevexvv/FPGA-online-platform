@@ -108,6 +108,13 @@ const useStyles = makeStyles({
   hidden: {
     display: 'none',
   },
+  reportLink: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: tokens.colorBrandForeground1,
+    textDecoration: 'none',
+    ':hover': { textDecoration: 'underline' },
+  },
   // Вкладка с заданием: условие и интерфейс прокручиваются, если не помещаются
   taskText: {
     flex: 1,
@@ -330,6 +337,15 @@ const WorkspaceContent: React.FC<WorkspaceContentProps> = ({ lab, lastSubmission
             submitError={submitError}
             isConnectionLost={runStatus.isConnectionLost}
             runError={runStatus.error}
+            // Когда проверка закончилась, из терминала можно перейти к полному отчёту
+            action={
+              finishedRunId &&
+              submissionId && (
+                <Link to={`/history/${submissionId}`} className={styles.reportLink}>
+                  Полный отчёт →
+                </Link>
+              )
+            }
           />
         </section>
       </div>

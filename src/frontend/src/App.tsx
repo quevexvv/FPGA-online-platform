@@ -20,6 +20,11 @@ const BookingPage = lazy(() =>
   import('@/pages/BookingPage').then((module) => ({ default: module.BookingPage })),
 );
 
+// Отчёт тоже показывает плату и редактор кода, поэтому грузим его отдельно
+const ReportPage = lazy(() =>
+  import('@/pages/ReportPage').then((module) => ({ default: module.ReportPage })),
+);
+
 const useStyles = makeStyles({
   appContainer: {
     width: '100vw',
@@ -80,6 +85,7 @@ export const App: React.FC = () => {
                 <Route path="/workspace/:labId" element={<WorkspacePage />} />
                 <Route path="/booking" element={<BookingPage />} />
                 <Route path="/history" element={<HistoryPage />} />
+                <Route path="/history/:submissionId" element={<ReportPage />} />
                 {/* Любой неизвестный адрес ведёт к списку лабораторных */}
                 <Route path="*" element={<Navigate to="/labs" replace />} />
               </Routes>
