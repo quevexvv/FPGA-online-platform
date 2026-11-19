@@ -20,12 +20,17 @@ export function getSubmission(submissionId: string): Promise<SubmissionDetail> {
   return apiRequest<SubmissionDetail>(`/submissions/${encodeURIComponent(submissionId)}`);
 }
 
+// Отправки по лабораторной, от новых к старым. Сервер отдаёт не больше 100 за раз
+export function getLabSubmissions(labId: string, limit = 20): Promise<SubmissionSummary[]> {
+  return apiRequest<SubmissionSummary[]>(
+    `/labs/${encodeURIComponent(labId)}/submissions?limit=${limit}`,
+  );
+}
+
 // Последнее отправленное решение по лабораторной вместе с кодом. null — ещё не отправляли
 export async function getLatestSubmission(labId: string): Promise<SubmissionDetail | null> {
   // Сервер отдаёт список от новых к старым, поэтому достаточно первой записи
-  const list = await apiRequest<SubmissionSummary[]>(
-    `/labs/${encodeURIComponent(labId)}/submissions?limit=1`,
-  );
+  const list = await getLabSubmissions(labId, 1);
   if (list.length === 0) return null;
   return getSubmission(list[0].id);
 }

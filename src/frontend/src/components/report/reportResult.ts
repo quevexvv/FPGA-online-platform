@@ -124,3 +124,35 @@ export function resultStats(run: RunStatus | null): ResultStat[] {
   }
   return stats;
 }
+
+// Короткий итог для таблицы истории: «Несовпадение тестов (LEDR3 не сошёлся)»
+export function shortResult(run: RunStatus): ResultText {
+  const tone = describeResult(run).tone;
+  const text = (title: string) => ({ tone, title, description: '' });
+
+  if (run.state === 'not_started') return text('Не запускалась');
+  if (run.state === 'queued') return text('В очереди');
+  if (run.state === 'running') return text(run.stage ? stageLabels[run.stage] : 'Проверка');
+
+  switch (run.result_status) {
+    case 'passed':
+      return text('Успешно (все тесты пройдены)');
+    case 'mismatch': {
+      const failed = run.tests.find((test) => !test.match);
+      if (!failed) return text('Не пройдены дополнительные проверки');
+      const names = mismatchedLeds(boardStateFromTest(failed));
+      const verb = names.length === 1 ? 'не сошёлся' : 'не сошлись';
+      return text(`Несовпадение тестов (${names.join(', ')} ${verb})`);
+    }
+    case 'build_error':
+      return text('Ошибка сборки');
+    case 'invalid_input':
+      return text('Неверный формат кода');
+    case 'board_error':
+      return text('Сбой оборудования');
+    case 'busy':
+      return text('Стенд был занят');
+    default:
+      return text('Сбой платформы');
+  }
+}
