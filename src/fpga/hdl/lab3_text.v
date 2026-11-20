@@ -40,7 +40,7 @@ endfunction
 
 genvar position;
 generate for (position = 0; position < 4; position = position + 1) begin : digit
-    wire [2:0] index = {1'b0, offset} + position;
+    wire [2:0] index = {1'b0, offset} + position[2:0];
     assign display[27-position*7 -: 7] = index < length ? glyphs[index] : 7'd0;
 end endgenerate
 

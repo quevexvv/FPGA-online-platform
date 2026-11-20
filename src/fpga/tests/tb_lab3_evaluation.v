@@ -2,23 +2,20 @@
 module tb_lab3_evaluation #(parameter IGNORE_ENTER = 0);
 localparam CLKS_PER_BIT = 32, BIT_NS = CLKS_PER_BIT * 10;
 reg clk = 0, rx = 1;
-reg start_text = 0, start_bad = 0, finish_text = 0;
 wire tx;
-wire [27:0] display;
-wire [2:0] before_count, after_count;
-wire [139:0] before_frames, after_frames;
+wire [6:0] hex0, hex1, hex2, hex3;
+wire [314:0] trace = dut.trace_probe.probe;
 wire [7:0] reply;
 wire reply_valid, reply_parity_error, reply_stop_error;
 reg [111:0] uart_data = 0;
 integer uart_count = 0;
 
 always #5 clk = ~clk;
-lab3_text #(.CLKS_PER_BIT(CLKS_PER_BIT), .STEP_CYCLES(1200), .IGNORE_ENTER(IGNORE_ENTER))
-    dut (.clk(clk), .rx(rx), .tx(tx), .display(display));
-lab3_trace #(.SETTLE_CYCLES(24)) trace (
-    .clk(clk), .start_text(start_text), .start_bad(start_bad), .finish_text(finish_text),
-    .display(display), .before_count(before_count), .after_count(after_count),
-    .before_frames(before_frames), .after_frames(after_frames)
+lab3_evaluation #(
+    .CLKS_PER_BIT(CLKS_PER_BIT), .STEP_CYCLES(1200), .SETTLE_CYCLES(24),
+    .IGNORE_ENTER(IGNORE_ENTER)
+) dut (
+    .clk(clk), .rx(rx), .tx(tx), .hex0(hex0), .hex1(hex1), .hex2(hex2), .hex3(hex3)
 );
 uart_rx #(.CLKS_PER_BIT(CLKS_PER_BIT), .EVEN_PARITY(1)) read_reply (
     .clk(clk), .reset(1'b0), .rx(tx), .data(reply), .valid(reply_valid),
@@ -56,29 +53,37 @@ initial begin
     @(negedge clk);
     send("1", 0); send("2", 0); send("3", 0);
     send("4", 0); send("5", 0); send("6", 0);
-    start_text = 1;
-    #10 start_text = 0;
     #60000;
     send("9", 1);
-    start_bad = 1;
-    #10 start_bad = 0;
     #60000;
-    finish_text = 1;
     send(8'h0d, 0);
     #30000;
     if (uart_count != 14 || uart_data !== 112'h313233343536251b5b324a1b5b48)
         $fatal(1, "Unexpected UART transcript");
-    if (before_count != 5 || after_count != 5) $fatal(1, "Incomplete trace");
+    dut.trace_probe.source = 1;
+    #40;
+    if (trace[314:308] !== {1'b1, 3'd5, 3'd5}) $fatal(1, "Incomplete JTAG trace");
+    if (trace[307:280] !== ~{hex3, hex2, hex1, hex0}) $fatal(1, "Wrong pin polarity");
     if (!$value$plusargs("trace=%s", filename)) $fatal(1, "Missing trace output");
     file = $fopen(filename, "w");
     if (!file) $fatal(1, "Cannot open trace output");
     $fdisplay(file, "{\"schema_version\":1,\"current\":%0d,\"before\":[%0d,%0d,%0d,%0d,%0d],\"after\":[%0d,%0d,%0d,%0d,%0d]}",
-        display,
-        before_frames[139:112], before_frames[111:84], before_frames[83:56],
-        before_frames[55:28], before_frames[27:0],
-        after_frames[139:112], after_frames[111:84], after_frames[83:56],
-        after_frames[55:28], after_frames[27:0]);
+        trace[307:280], trace[279:252], trace[251:224], trace[223:196],
+        trace[195:168], trace[167:140], trace[139:112], trace[111:84],
+        trace[83:56], trace[55:28], trace[27:0]);
     $fclose(file);
     $finish;
 end
+endmodule
+
+// Model only the ISSP ports. The test drives the synchronized source.
+module altsource_probe #(
+    parameter instance_id = "", sld_auto_instance_index = "",
+    parameter sld_instance_index = 0, source_width = 1, probe_width = 1,
+    parameter source_initial_value = "0", enable_metastability = ""
+) (
+    input wire source_clk, source_ena,
+    input wire [probe_width-1:0] probe,
+    output reg [source_width-1:0] source = 0
+);
 endmodule

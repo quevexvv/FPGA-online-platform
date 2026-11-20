@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 3 || ! $1 =~ ^(program|probe|snapshot)$ || ! $3 =~ ^[1-9][0-9]*$ ]]; then
-    echo 'Usage: bash scripts/jtag-observe.sh program|probe|snapshot <cable-name> <device-index>' >&2
+if [[ $# -ne 3 || ! $1 =~ ^(program|probe|snapshot|lab3-trace)$ || ! $3 =~ ^[1-9][0-9]*$ ]]; then
+    echo 'Usage: bash scripts/jtag-observe.sh program|probe|snapshot|lab3-trace <cable-name> <device-index>' >&2
     exit 2
 fi
 
