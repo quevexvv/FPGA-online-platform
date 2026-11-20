@@ -120,10 +120,31 @@ cp -- "$output/result.json" "$root/result"
 dispatch status | jq -e '.state == "finished" and .result_status == "passed"' >/dev/null
 cmp -- "$root/result" "$output/result.json"
 [[ ! -e $job/work ]]
+for damage in '.finished_at = "2000-01-01T00:00:00Z"' '.stage = "testing"'; do
+    jq "$damage" "$output/status.json" > "$root/broken-status.json"
+    mv -- "$root/broken-status.json" "$output/status.json"
+    dispatch status | jq -e --slurpfile result "$root/result" '
+        .state == "finished" and .stage == "finalizing" and
+        .result_status == $result[0].status and .started_at == $result[0].started_at and
+        .finished_at == $result[0].finished_at and .updated_at == $result[0].finished_at
+    ' >/dev/null
+    cmp -- "$root/result" "$output/result.json"
+done
 rm -- "$output/result.json"
 reject 1 dispatch cleanup
 expect_error result_missing
-echo 'PASS: pending registration, host restart, killed process, result recovery and missing result'
+
+prepare 7
+submit
+run
+jq '.observations[0] |= (
+    .mask = "0x3ffff" |
+    .expected_dout = (if .dout == "0x00000" then "0x00001" else "0x00000" end)
+)' "$output/result.json" > "$root/broken-result.json"
+mv -- "$root/broken-result.json" "$output/result.json"
+reject 1 dispatch cleanup
+expect_error result_invalid
+echo 'PASS: pending registration, host restart, killed process, result recovery and missing or invalid result'
 
 prepare 5
 submit
