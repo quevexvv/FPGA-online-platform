@@ -51,7 +51,7 @@ publish_run_result() {
     local planned=${9:-0} comparison=${10:-/dev/null} now log logs
     local log_files=()
     now=$(timestamp) || return 1
-    for log in logs/{build,program,uart,test}.log; do
+    for log in logs/{build,timing,program,uart,test}.log; do
         if [[ -f $output/$log && ! -L $output/$log ]]; then log_files+=("$log"); fi
     done
     logs=$(jq -cn --args '$ARGS.positional' "${log_files[@]}") || return 1
