@@ -182,3 +182,12 @@ test-lab3-uart-probe:
 
 test-lab3-uart-hardware: build/fpga-uart-stimulus
 	@bash tests/lab3-uart-hardware.sh "$${UART_PORT:-}"
+
+.PHONY: build-lab3-evaluation test-lab3-evaluation
+build-lab3-evaluation:
+	cd quartus && "$(QUARTUS_SH)" --flow compile lab3_evaluation
+
+test-hdl: test-lab3-evaluation
+
+test-lab3-evaluation:
+	IVERILOG="$(IVERILOG)" VVP="$(VVP)" bash tests/lab3-evaluation.sh

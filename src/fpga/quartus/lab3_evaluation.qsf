@@ -1,0 +1,26 @@
+set_global_assignment -name FAMILY "Cyclone V"
+set_global_assignment -name DEVICE 5CGXFC5C6F27C7
+set_global_assignment -name TOP_LEVEL_ENTITY lab3_evaluation
+set_global_assignment -name VERILOG_FILE ../hdl/lab3_evaluation.v
+set_global_assignment -name VERILOG_FILE ../hdl/lab3_text.v
+set_global_assignment -name VERILOG_FILE ../hdl/lab3_trace.v
+set_global_assignment -name VERILOG_FILE ../hdl/jtag_snapshot.v
+set_global_assignment -name VERILOG_FILE ../hdl/uart_rx.v
+set_global_assignment -name VERILOG_FILE ../hdl/uart_tx.v
+set_global_assignment -name SDC_FILE lab3_evaluation.sdc
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY "../build/lab3-evaluation"
+set_global_assignment -name NUM_PARALLEL_PROCESSORS 2
+# Keep the defined power-up state of the trace and reference registers.
+set_global_assignment -name ALLOW_POWER_UP_DONT_CARE OFF
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS "AS INPUT TRI-STATED"
+
+set_location_assignment PIN_R20 -to clk
+set_location_assignment PIN_M9 -to rx
+set_location_assignment PIN_L9 -to tx
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to clk
+set_instance_assignment -name IO_STANDARD "2.5 V" -to rx
+set_instance_assignment -name IO_STANDARD "2.5 V" -to tx
+source c5g-hex.qsf
+
+set_global_assignment -name LAST_QUARTUS_VERSION "23.1std.0 Lite Edition"
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS_NO_OUTPUT_GND "AS INPUT TRI-STATED"

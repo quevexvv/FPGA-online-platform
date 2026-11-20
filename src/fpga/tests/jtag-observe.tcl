@@ -38,3 +38,12 @@ foreach {replies expected} [list \
     if {$opened != $closed} { error "Expected session cleanup after failure" }
 }
 puts "PASS: decoded snapshot, timeout, unstable/invalid data and session cleanup"
+
+set previous "1[string repeat 0 314]"
+set one "[string repeat 0 27]1"
+set two "[string repeat 0 26]10"
+set captured "0010001${one}[string repeat 0 84]${one}${two}[string repeat 0 112]${two}"
+set replies [list $previous $captured $captured]
+set expected {{"schema_version":1,"current":1,"before":[1,2],"after":[2]}}
+if {[capture_lab3_trace] ne $expected} { error "Unexpected Lab 3 trace bit layout" }
+puts "PASS: wide JTAG trace decoding and frame order"
