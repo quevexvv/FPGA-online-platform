@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 3 || ( $1 != program && $1 != probe ) || ! $3 =~ ^[1-9][0-9]*$ ]]; then
-    echo 'Usage: bash scripts/jtag-observe.sh program|probe <cable-name> <device-index>' >&2
+if [[ $# -ne 3 || ! $1 =~ ^(program|probe|snapshot)$ || ! $3 =~ ^[1-9][0-9]*$ ]]; then
+    echo 'Usage: bash scripts/jtag-observe.sh program|probe|snapshot <cable-name> <device-index>' >&2
     exit 2
 fi
 
@@ -29,4 +29,16 @@ if [[ $1 == program ]]; then
     }
     exec timeout --kill-after=2s 30s quartus_pgm -c "$2" -m JTAG -o "p;jtag_probe.sof@$3"
 fi
-exec timeout --kill-after=2s 30s quartus_stp -t "$project/scripts/jtag-observe.tcl" "$@"
+
+if [[ $1 == probe ]]; then
+    exec timeout --kill-after=2s 30s quartus_stp -t "$project/scripts/jtag-observe.tcl" "$@"
+fi
+
+# Keep stdout reserved for the snapshot. Publish only after quartus_stp succeeds.
+snapshot=$(timeout --kill-after=2s 30s quartus_stp -t "$project/scripts/jtag-observe.tcl" "$@" |
+    awk '/^SNAPSHOT / {print substr($0, 10); next} {print > "/dev/stderr"}') || exit "$?"
+if [[ -z $snapshot || $snapshot == *$'\n'* ]]; then
+    echo 'Expected exactly one JTAG snapshot' >&2
+    exit 1
+fi
+printf '%s\n' "$snapshot"

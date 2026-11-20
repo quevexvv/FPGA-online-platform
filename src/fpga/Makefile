@@ -95,8 +95,13 @@ probe-vendor:
 test-contract:
 	@bash tests/contract.sh
 
-.PHONY: test-clock test-hdl
-test-hdl: test-simulator test-led test-clock test-clock-board test-uart-rx test-uart-tx test-uart-commands test-dut-control test-wrapper
+.PHONY: test-clock test-hdl test-jtag-snapshot
+test-hdl: test-simulator test-led test-clock test-clock-board test-uart-rx test-uart-tx test-uart-commands test-dut-control test-wrapper test-jtag-snapshot
+
+test-jtag-snapshot:
+	@mkdir -p build
+	$(IVERILOG) -g2001 -Wall -s tb_jtag_snapshot -o build/tb_jtag_snapshot tests/tb_jtag_snapshot.v hdl/jtag_snapshot.v
+	$(VVP) build/tb_jtag_snapshot
 
 WRAPPER_HDL := hdl/fpga_wrapper.v hdl/dut_control.v hdl/clock_burst.v hdl/uart_service.v hdl/uart_commands.v hdl/uart_rx.v hdl/uart_tx.v
 .PHONY: test-wrapper
