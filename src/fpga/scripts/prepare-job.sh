@@ -17,6 +17,8 @@ invalid() {
 unsafe=$(find -P "$input" ! -type d ! \( -type f -links 1 \) -printf x -quit)
 [[ -z $unsafe ]] || invalid 'upload contains a link or a special file'
 [[ -f $input/manifest.json ]] || invalid 'manifest.json is missing'
+manifest_bytes=$(stat -c %s -- "$input/manifest.json")
+(( manifest_bytes <= 4096 )) || invalid 'manifest exceeds 4096 bytes'
 manifest=$(jq -ces 'select(length == 1) | .[0]' "$input/manifest.json") ||
     invalid 'expected one JSON manifest'
 jq -e --arg kind manifest --arg run_id "$run_id" -f "$project/scripts/contract.jq" \
@@ -43,9 +45,14 @@ fi
 
 source_list=$(jq -r '.sources[]' <<< "$manifest")
 mapfile -t sources <<< "$source_list"
+(( ${#sources[@]} <= 16 )) || invalid 'more than 16 source files'
 source_files=()
+total_bytes=0
 for path in "${sources[@]}"; do
     [[ -f $input/$path ]] || invalid "missing source: $path"
+    source_bytes=$(stat -c %s -- "$input/$path")
+    total_bytes=$((total_bytes + source_bytes))
+    (( total_bytes <= 65536 )) || invalid 'sources exceed 65536 bytes in total'
     if LC_ALL=C grep -Eq '`[[:space:]]*include|[$]readmem[bh]' "$input/$path"; then
         invalid "external file references are unsupported: $path"
     elif [[ $? -ne 1 ]]; then

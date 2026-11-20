@@ -213,7 +213,7 @@ if [[ $launch == systemd ]]; then
         exec {lock_fd}>&-
         exec systemd-run --user --quiet --collect --no-ask-password --expand-environment=no \
             --unit="fpga-run-$run_id" --service-type=exec \
-            --property=Restart=no --property=StandardInput=null \
+            --property=Restart=no --property=StandardInput=null --property=MemoryMax=3G \
             --property=StandardOutput=journal --property=StandardError=journal \
             --setenv="FPGA_JOBS_ROOT=$root" --setenv="FPGA_RUN_CONFIG=${FPGA_RUN_CONFIG:-}" \
             -- "$project/bin/fpga-run" --job "$run/input" --output "$run/output" --mode "$mode"

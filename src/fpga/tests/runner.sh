@@ -204,6 +204,35 @@ flock -n "$runs/.stand.lock" true
 echo 'PASS: Quartus stage, active stand lock, failure, timeout and stale artifact'
 
 config 2000
+mkdir -- "$root/limits-bin"
+cat > "$root/limits-bin/df" <<'DISK'
+#!/usr/bin/env bash
+printf 'Avail\n%s\n' "$TEST_AVAILABLE_KIB"
+DISK
+cat > "$root/limits-bin/du" <<'WORK'
+#!/usr/bin/env bash
+printf '%s\t%s\n' "$TEST_WORK_KIB" "${!#}"
+WORK
+chmod +x -- "$root/limits-bin/"{df,du}
+# The fixture logs are capped at 2048 bytes each.
+required_kib=$((2176 * 1024 + 8))
+prepare_build 26 ok
+PATH="$root/limits-bin:$PATH" TEST_AVAILABLE_KIB=$((required_kib - 1)) run "$id" hardware
+check_result "$id" internal_error
+check_code "$id" disk_space_low
+[[ ! -e $runs/$id/output/logs/build.log ]]
+prepare_build 27 ok
+PATH="$root/limits-bin:$PATH" TEST_AVAILABLE_KIB=$required_kib TEST_WORK_KIB=131073 run "$id" hardware
+check_result "$id" build_error
+check_code "$id" workspace_limit
+[[ ! -e $runs/$id/output/logs/program.log ]]
+prepare_build 28 ok
+PATH="$root/limits-bin:$PATH" TEST_AVAILABLE_KIB=$required_kib TEST_WORK_KIB=131072 run "$id" hardware
+check_result "$id" board_error
+check_code "$id" uart_not_ready
+[[ -f $runs/$id/output/logs/program.log ]]
+echo 'PASS: disk reserve and Quartus workspace boundaries'
+
 prepare_build 18 ok
 touch -- "$project/program-fail"
 run "$id" hardware

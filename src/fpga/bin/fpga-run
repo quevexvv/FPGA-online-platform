@@ -194,6 +194,14 @@ done
 if [[ -e $artifacts || -L $artifacts ]]; then
     finish_run build_error building output_exists 'Quartus output directory already exists'
 fi
+available_kib=$(df --output=avail -k -- "$work" | awk 'NR == 2 {print $1}') ||
+    finish_run internal_error building disk_check_failed 'Cannot read available space for Quartus'
+# Leave 2 GiB for the host, plus the workspace budget and the four capped logs.
+workspace_kib=$((128 * 1024))
+required_kib=$((2 * 1024 * 1024 + workspace_kib + 4 * ((max_log + 1023) / 1024)))
+if [[ ! $available_kib =~ ^[0-9]+$ ]] || (( available_kib < required_kib )); then
+    finish_run internal_error building disk_space_low 'Insufficient space for Quartus and host reserve'
+fi
 mkdir -- "$work/home" "$work/tmp" ||
     finish_run internal_error building workspace_error 'Cannot create private Quartus directories'
 
@@ -231,6 +239,11 @@ case "$stage_result" in
     129|130|143) finish_run internal_error building interrupted 'Build was interrupted' ;;
     *) finish_run internal_error building stage_failed 'Could not run Quartus build' ;;
 esac
+used_kib=$(du -skx -- "$work") ||
+    finish_run internal_error building disk_check_failed 'Cannot measure the Quartus workspace'
+if (( ${used_kib%%[[:space:]]*} > workspace_kib )); then
+    finish_run build_error building workspace_limit 'Quartus workspace exceeds 128 MiB'
+fi
 sof=$artifacts/job.sof
 if ! safe_dir "$artifacts" || ! safe_file "$sof" || [[ ! -s $sof || $(stat -c %h -- "$sof") != 1 ]]; then
     finish_run build_error building missing_sof 'Quartus did not create a new job.sof'
