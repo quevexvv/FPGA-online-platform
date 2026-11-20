@@ -354,6 +354,41 @@ jq -ecn --slurpfile vectors "$vectors" \
     jq -e '.complete == true and [.observations[].steps] == [0,3,1]' >/dev/null
 echo 'PASS: vector widths and complete or partial UART observations'
 
+if (( EUID != 0 )); then
+    cat > "$root/permission-frames" <<'FRAMES'
+1Q0000 1D00000
+1S0000 1K00000
+1Q0000 1D00000
+FRAMES
+    ./build/test-uart-peer "$root/permission-frames" "$root/permission-port" &
+    peer=$!
+    for _ in {1..200}; do
+        [[ -s $root/permission-port ]] && break
+        sleep .01
+    done
+    port=$(<"$root/permission-port")
+    chmod 000 -- "$port"
+    [[ -c $port && ! -r $port && ! -w $port ]]
+    build/fpga-stage 2000 1024 "$root/permission-probe.log" -- \
+        bash scripts/uart-job.sh "$PWD/build/fpga-uart" "$port" 500 probe &
+    active=$!
+    for _ in {1..100}; do
+        [[ -f $root/permission-probe.log ]] && break
+        sleep .01
+    done
+    [[ -f $root/permission-probe.log ]]
+    sleep .2
+    kill -0 "$active"
+    chmod 600 -- "$port"
+    wait "$active"
+    active=
+    printf 'D 0x00000\nK\nD 0x00000\n' | cmp - "$root/permission-probe.log"
+    kill -TERM "$peer"
+    wait "$peer" 2>/dev/null || [[ $? == 143 ]]
+    peer=
+    echo 'PASS: UART waits for device permissions'
+fi
+
 run_with_peer() {
     local transcript=$1 ready=$root/$id.port peer_code=0
     ./build/test-uart-peer "$transcript" "$ready" &

@@ -7,9 +7,10 @@ timeout=$3
 
 case "$4" in
     probe)
-        # The stage watchdog bounds the wait for the device to appear.
-        while [[ ! -c $port ]]; do
-            if [[ -e $port ]]; then echo 'UART path is not a character device' >&2; exit 2; fi
+        # udev can set the owner and mode after the device node appears.
+        # The stage watchdog bounds both waits.
+        while [[ ! -c $port || ! -r $port || ! -w $port ]]; do
+            if [[ -e $port && ! -c $port ]]; then echo 'UART path is not a character device' >&2; exit 2; fi
             sleep .1
         done
         # A fresh serial_open flushes stale bytes. Require both reply types
