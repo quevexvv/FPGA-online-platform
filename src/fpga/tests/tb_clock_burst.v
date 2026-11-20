@@ -7,7 +7,7 @@ wire dut_clk, dut_reset, busy, done;
 integer edges = 0, resets = 0, i;
 time last_rise = 0, last_fall = 0;
 clock_burst #(.HALF_PERIOD(HALF_PERIOD)) generator (
-    .clk(clk), .start(start), .reset_command(reset_command), .steps(steps),
+    .clk(clk), .reset(1'b0), .start(start), .reset_command(reset_command), .steps(steps),
     .dut_clk(dut_clk), .dut_reset(dut_reset), .busy(busy), .done(done)
 );
 always #10 clk = ~clk;

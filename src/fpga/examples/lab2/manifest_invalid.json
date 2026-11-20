@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "top": "student_top",
+  "kind": "sequential",
+  "sources": [
+    "src/student_top.v"
+  ],
+  "test_set": "lab2_running_led"
+}

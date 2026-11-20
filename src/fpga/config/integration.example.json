@@ -1,4 +1,14 @@
 {
   "jobs_root": null,
-  "uart_device": null
+  "uart_device": null,
+  "quartus_sh": null,
+  "quartus_pgm": null,
+  "jtag_cable": null,
+  "jtag_device_index": null,
+  "build_timeout_ms": 120000,
+  "program_timeout_ms": 20000,
+  "uart_ready_timeout_ms": 120000,
+  "uart_timeout_ms": 500,
+  "test_timeout_ms": 40000,
+  "max_log_bytes": 262144
 }

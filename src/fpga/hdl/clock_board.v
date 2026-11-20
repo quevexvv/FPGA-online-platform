@@ -7,7 +7,7 @@ reg start = 0, reset_command = 0;
 reg [15:0] steps = 0;
 wire dut_clk, dut_reset, busy, done;
 clock_burst #(.HALF_PERIOD(HALF_PERIOD)) generator (
-    .clk(clk), .start(start), .reset_command(reset_command), .steps(steps),
+    .clk(clk), .reset(1'b0), .start(start), .reset_command(reset_command), .steps(steps),
     .dut_clk(dut_clk), .dut_reset(dut_reset), .busy(busy), .done(done)
 );
 // This independent counter sees actual generated clock edges.

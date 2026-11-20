@@ -24,6 +24,7 @@ class User(Base):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     email: Mapped[str] = mapped_column(String(254), nullable=False)
     full_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    group: Mapped[str | None] = mapped_column("student_group", String(32), nullable=True)
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     role: Mapped[str] = mapped_column(
         String(20), nullable=False, default=UserRole.student.value, server_default="student"

@@ -1,0 +1,7 @@
+set_global_assignment -name TOP_LEVEL_ENTITY fpga_wrapper
+source wrapper_base.qsf
+set_global_assignment -name VERILOG_FILE ../examples/combinational/student_top.v
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY ../build/wrapper_combinational
+
+set_global_assignment -name LAST_QUARTUS_VERSION "23.1std.0 Lite Edition"
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS_NO_OUTPUT_GND "AS INPUT TRI-STATED"

@@ -4,14 +4,330 @@ set -euo pipefail
 if [[ $# -eq 1 && $1 == --help ]]; then
     cat <<'HELP'
 Usage: fpga-run --help
-Планируемый внутренний интерфейс:
-  fpga-run --job <path> --output <path> --mode hardware|mock
+Внутренний интерфейс:
+  fpga-run --job <input> --output <output> --mode hardware|mock
 
-Каркас: исполнитель ещё не реализован.
 Бэкенд должен вызывать fpga-dispatch, а не fpga-run.
 HELP
     exit 0
 fi
 
-printf '%s\n' 'fpga-run: исполнитель ещё не реализован; см. --help.' >&2
-exit 2
+fail() {
+    printf 'fpga-run: %s\n' "$2" >&2
+    exit "$1"
+}
+
+[[ $# -eq 6 && $1 == --job && $3 == --output && $5 == --mode &&
+    ( $6 == hardware || $6 == mock ) ]] || fail 2 'expected --job, --output and --mode'
+mode=$6
+id=${2%/input}
+id=${id##*/}
+[[ $id =~ ^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$ ]] || fail 2 'invalid run_id'
+[[ -n ${FPGA_JOBS_ROOT:-} && $FPGA_JOBS_ROOT == /* && -d $FPGA_JOBS_ROOT ]] ||
+    fail 1 'FPGA_JOBS_ROOT must be an existing absolute directory'
+root=$(cd -- "$FPGA_JOBS_ROOT" && pwd -P)
+[[ $root != / ]] || fail 1 'FPGA_JOBS_ROOT must be dedicated to jobs'
+umask 077
+project=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+# shellcheck source=scripts/run-state.sh
+source "$project/scripts/run-state.sh"
+runs=$root/runs
+run=$runs/$id
+output=$run/output
+control=$run/control
+work=$run/work
+id_lock_path=$runs/.locks/$id
+[[ $2 == "$run/input" && $4 == "$output" ]] || fail 2 'paths must belong to the registered run'
+for directory in "$runs" "$runs/.locks"; do
+    safe_dir "$directory" || fail 2 'run directories are missing or unsafe'
+done
+safe_file "$id_lock_path" || fail 2 'run_id is not registered'
+exec {id_lock}>> "$id_lock_path"
+flock -x "$id_lock"
+
+for directory in "$run" "$run/input" "$work" "$output" "$output/logs" "$control"; do
+    safe_dir "$directory" || fail 2 'run directories are missing or unsafe'
+done
+! exists "$control/cleaned.json" || fail 2 'run has been cleaned'
+if ! safe_file "$control/registration.json" || ! safe_file "$output/status.json"; then
+    fail 2 'registration is missing or unsafe'
+fi
+jq -es --arg id "$id" --arg mode "$mode" '
+    . == [{schema_version:1,run_id:$id,mode:$mode}]
+' "$control/registration.json" >/dev/null || fail 2 'registration does not match run_id and mode'
+jq -es --arg id "$id" --arg mode "$mode" '
+    length == 1 and (.[0] | .schema_version == 1 and .run_id == $id and .mode == $mode and
+                     .state == "starting" and .stage == "dispatch")
+' "$output/status.json" >/dev/null || fail 2 'run is not waiting to start'
+[[ ! -e $output/result.json && ! -L $output/result.json ]] || fail 2 'run already has a result'
+optional_file "$control/activity.lock" || fail 2 'unsafe activity lock'
+exec {activity_lock}>> "$control/activity.lock"
+flock -n "$activity_lock" || fail 2 'run is still active'
+mkdir -- "$control/started" 2>/dev/null || fail 2 'run cannot be started again'
+# The activity lock stays open through result publication and all child processes.
+exec {id_lock}>&-
+
+started_at=
+planned=0
+comparison=/dev/null
+finish_run() {
+    publish_run_result "$output" "$id" "$mode" "$started_at" "$1" "$2" "$3" "$4" "$planned" "$comparison"
+    remove_run_payload "$work" || printf '%s\n' 'fpga-run: work cleanup failed' >&2
+    exit 0
+}
+
+if [[ $mode == hardware ]]; then
+    # Manual and systemd launches use the same operator account and lock inode.
+    account=$(getent passwd "$EUID") ||
+        finish_run internal_error locking stand_lock_error 'Cannot look up the stand operator'
+    IFS=: read -r _ _ operator_uid _ _ operator_home _ <<< "$account"
+    if [[ $operator_uid != "$EUID" || $operator_home != /* || $operator_home == / ||
+          ! -d $operator_home ]]; then
+        finish_run internal_error locking stand_lock_error 'Stand operator home is invalid'
+    fi
+    home_info=$(stat -Lc '%u %a' -- "$operator_home") ||
+        finish_run internal_error locking stand_lock_error 'Cannot inspect the stand operator home'
+    read -r home_owner home_mode <<< "$home_info"
+    if [[ $home_owner != "$EUID" || ! $home_mode =~ ^[0-7]{3,4}$ ]] ||
+            (( (8#$home_mode & 022) != 0 )); then
+        finish_run internal_error locking stand_lock_error 'Stand operator home is unsafe'
+    fi
+    stand_lock_path=$operator_home/.fpga-stand-lock
+    mkdir -m 700 -- "$stand_lock_path" 2>/dev/null || :
+    if ! safe_dir "$stand_lock_path" || [[ $(stat -c '%u %a' -- "$stand_lock_path") != "$EUID 700" ]] ||
+            ! exec {stand_lock}< "$stand_lock_path"; then
+        finish_run internal_error locking stand_lock_error 'Cannot open a private stand lock directory'
+    fi
+else
+    stand_lock_path=$runs/.stand.lock
+    if ! optional_file "$stand_lock_path"; then
+        finish_run internal_error locking stand_lock_error 'Stand lock path is unsafe'
+    fi
+    if ! exec {stand_lock}>> "$stand_lock_path"; then
+        finish_run internal_error locking stand_lock_error 'Cannot open the stand lock'
+    fi
+fi
+lock_result=0
+flock -n -E 75 "$stand_lock" || lock_result=$?
+case "$lock_result" in
+    0) ;;
+    75) finish_run busy locking stand_busy 'Stand is already in use' ;;
+    *) finish_run internal_error locking stand_lock_error 'Cannot lock the stand' ;;
+esac
+
+vectors=$work/test-set.json
+if ! safe_file "$vectors" || ! jq -es -f "$project/scripts/test-set.jq" "$vectors" >/dev/null; then
+    finish_run internal_error validating test_set_invalid 'Prepared test set is missing or invalid'
+fi
+planned=$(jq 'length' "$vectors")
+
+publish_stage() {
+    publish_run_status "$output" "$id" "$mode" "$started_at" running "$1"
+}
+
+compare_observations() {
+    local report=$1
+    if ! jq -cn --slurpfile vectors "$vectors" --slurpfile report "$report" \
+        -f "$project/scripts/compare-vectors.jq" > "$work/comparison.json"; then
+        finish_run internal_error finalizing comparison_failed 'Cannot compare observations'
+    fi
+    comparison=$work/comparison.json
+}
+
+finish_comparison() {
+    if jq -e '.summary.failed == 0' "$comparison" >/dev/null; then
+        finish_run passed finalizing '' ''
+    fi
+    finish_run mismatch finalizing '' ''
+}
+
+if [[ $mode == mock ]]; then
+    model=$(jq -er '.test_set' "$run/input/manifest.json") ||
+        finish_run invalid_input validating mock_model_invalid 'Cannot read the demo model'
+    case "$model" in
+        counter-v1|combinational-v1|mock-uart-error-v1) ;;
+        *) finish_run invalid_input validating mock_model_invalid 'Unknown demo model' ;;
+    esac
+    started_at=$(timestamp)
+    publish_stage testing
+    if [[ $model == mock-uart-error-v1 ]]; then
+        finish_run board_error testing mock_uart_timeout 'Simulated UART timeout'
+    fi
+    report=$work/observations.json
+    jq -cn --arg model "$model" --slurpfile vectors "$vectors" \
+        -f "$project/scripts/mock-vectors.jq" > "$report" ||
+        finish_run internal_error testing mock_failed 'Cannot calculate demo observations'
+    compare_observations "$report"
+    finish_comparison
+fi
+
+config=${FPGA_RUN_CONFIG:-}
+if [[ $config != /* ]] || ! safe_file "$config"; then
+    finish_run internal_error validating config_invalid 'Set FPGA_RUN_CONFIG to the stand configuration'
+fi
+settings=$(jq -ers '
+    def limit: type == "number" and . == floor and . >= 1 and . <= 2147483647;
+    def text: type == "string" and length > 0 and (test("[[:cntrl:]]") | not);
+    def path: text and startswith("/");
+    select(length == 1) | .[0] |
+    select((.quartus_sh | path) and (.quartus_pgm | path) and (.uart_device | path) and
+           (.jtag_cable | text) and (.jtag_device_index | limit) and
+           (.build_timeout_ms | limit) and (.max_log_bytes | limit) and
+           (.program_timeout_ms | limit) and (.uart_ready_timeout_ms | limit) and (.test_timeout_ms | limit) and
+           (.uart_timeout_ms | limit and . <= 60000)) |
+    .quartus_sh, .quartus_pgm, .jtag_cable, .jtag_device_index, .uart_device,
+    .build_timeout_ms, .program_timeout_ms, .uart_ready_timeout_ms, .uart_timeout_ms, .test_timeout_ms, .max_log_bytes
+' "$config") || finish_run internal_error validating config_invalid 'Stand tools or stage limits are invalid'
+{
+    IFS= read -r quartus
+    IFS= read -r programmer
+    IFS= read -r cable
+    IFS= read -r device_index
+    IFS= read -r uart_device
+    IFS= read -r build_timeout
+    IFS= read -r program_timeout
+    IFS= read -r uart_ready_timeout
+    IFS= read -r uart_timeout
+    IFS= read -r test_timeout
+    IFS= read -r max_log
+} <<< "$settings"
+for tool in "$quartus" "$programmer"; do
+    [[ -f $tool && -x $tool ]] ||
+        finish_run internal_error validating config_invalid 'Configured Quartus executable is missing'
+done
+[[ -x $project/build/fpga-stage && -x $project/build/fpga-uart ]] ||
+    finish_run internal_error validating stage_missing 'Build the host tools with make all'
+
+plan=$(jq -r '.[] | [.reset_before, .din, .steps] | @tsv' "$vectors")
+commands=$work/uart-commands
+(
+    set -o noclobber
+    while IFS=$'\t' read -r reset din steps; do
+        if [[ $reset == true ]]; then printf '%s\n' reset; fi
+        printf 'input 0%s\nstep %04x\nread\n' "${din#0x}" "$steps"
+    done <<< "$plan" > "$commands"
+) || finish_run internal_error validating test_plan_failed 'Cannot prepare UART commands'
+
+quartus_dir=$work/quartus
+artifacts=$quartus_dir/output_files
+safe_dir "$quartus_dir" || finish_run internal_error building project_missing 'Prepared project is missing'
+for file in job.qpf job.qsf wrapper_base.qsf wrapper.sdc; do
+    safe_file "$quartus_dir/$file" ||
+        finish_run internal_error building project_missing 'Prepared project is missing'
+done
+if [[ -e $artifacts || -L $artifacts ]]; then
+    finish_run build_error building output_exists 'Quartus output directory already exists'
+fi
+available_kib=$(df --output=avail -k -- "$work" | awk 'NR == 2 {print $1}') ||
+    finish_run internal_error building disk_check_failed 'Cannot read available space for Quartus'
+# Leave 2 GiB for the host, plus the workspace budget and the five capped logs.
+workspace_kib=$((128 * 1024))
+required_kib=$((2 * 1024 * 1024 + workspace_kib + 5 * ((max_log + 1023) / 1024)))
+if [[ ! $available_kib =~ ^[0-9]+$ ]] || (( available_kib < required_kib )); then
+    finish_run internal_error building disk_space_low 'Insufficient space for Quartus and host reserve'
+fi
+mkdir -- "$work/home" "$work/tmp" ||
+    finish_run internal_error building workspace_error 'Cannot create private Quartus directories'
+
+run_stage() {
+    local timeout=$1 log=$2 stage_pid
+    shift 2
+    interrupted=false
+    trap 'interrupted=true' HUP INT TERM
+    (
+        cd -- "$quartus_dir" || exit 125
+        exec env -i PATH=/usr/bin:/bin LC_ALL=C HOME="$work/home" TMPDIR="$work/tmp" \
+            "$project/build/fpga-stage" "$timeout" "$max_log" "$output/$log" -- "$@"
+    ) &
+    stage_pid=$!
+    stage_result=0
+    if [[ $interrupted == false ]]; then
+        wait "$stage_pid" || stage_result=$?
+    fi
+    if [[ $interrupted == true ]]; then
+        trap '' HUP INT TERM
+        kill -TERM "$stage_pid" 2>/dev/null || :
+        wait "$stage_pid" || :
+        stage_result=143
+    fi
+    trap - HUP INT TERM
+}
+
+started_at=$(timestamp)
+publish_stage building
+run_stage "$build_timeout" logs/build.log "$quartus" --flow compile job
+case "$stage_result" in
+    0) ;;
+    124) finish_run build_error building build_timeout 'Quartus build timed out' ;;
+    1) finish_run build_error building quartus_failed 'Quartus build failed' ;;
+    129|130|143) finish_run internal_error building interrupted 'Build was interrupted' ;;
+    *) finish_run internal_error building stage_failed 'Could not run Quartus build' ;;
+esac
+used_kib=$(du -skx -- "$work") ||
+    finish_run internal_error building disk_check_failed 'Cannot measure the Quartus workspace'
+if (( ${used_kib%%[[:space:]]*} > workspace_kib )); then
+    finish_run build_error building workspace_limit 'Quartus workspace exceeds 128 MiB'
+fi
+sof=$artifacts/job.sof
+if ! safe_dir "$artifacts" || ! safe_file "$sof" || [[ ! -s $sof || $(stat -c %h -- "$sof") != 1 ]]; then
+    finish_run build_error building missing_sof 'Quartus did not create a new job.sof'
+fi
+
+sta_summary=$artifacts/job.sta.summary
+sta_report=$artifacts/job.sta.rpt
+for report_file in "$sta_summary" "$sta_report"; do
+    if ! safe_file "$report_file" || [[ ! -s $report_file ]] ||
+            ! read -r links size < <(stat -c '%h %s' -- "$report_file") ||
+            [[ $links != 1 ]] || (( size > workspace_kib * 1024 )); then
+        finish_run build_error building timing_report_invalid 'Quartus did not create usable TimeQuest reports'
+    fi
+done
+timing_result=0
+timing_summary=$(LC_ALL=C awk -f "$project/scripts/check-timing.awk" "$sta_summary" "$sta_report") ||
+    timing_result=$?
+timing_summary+=$'\n'
+if ! (set -o noclobber; printf '%s' "${timing_summary:0:max_log}" > "$output/logs/timing.log"); then
+    finish_run internal_error building timing_log_failed 'Cannot save the TimeQuest summary'
+fi
+case "$timing_result" in
+    0) ;;
+    1) finish_run build_error building timing_failed 'TimeQuest reported negative slack or TNS' ;;
+    *) finish_run build_error building timing_report_invalid 'TimeQuest reports are invalid or incomplete' ;;
+esac
+
+publish_stage programming
+run_stage "$program_timeout" logs/program.log "$programmer" -c "$cable" -m JTAG \
+    -o "p;output_files/job.sof@$device_index"
+case "$stage_result" in
+    0) ;;
+    124) finish_run board_error programming program_timeout 'Programming timed out' ;;
+    1) finish_run board_error programming program_failed 'Quartus could not program the board' ;;
+    129|130|143) finish_run internal_error programming interrupted 'Programming was interrupted' ;;
+    *) finish_run internal_error programming stage_failed 'Could not run the programmer' ;;
+esac
+run_stage "$uart_ready_timeout" logs/uart.log bash "$project/scripts/uart-job.sh" \
+    "$project/build/fpga-uart" "$uart_device" "$uart_timeout" probe
+case "$stage_result" in
+    0) ;;
+    1|124) finish_run board_error programming uart_not_ready 'UART readiness check failed' ;;
+    129|130|143) finish_run internal_error programming interrupted 'UART readiness check was interrupted' ;;
+    *) finish_run internal_error programming stage_failed 'Could not run the UART readiness check' ;;
+esac
+publish_stage testing
+replies=$work/uart-replies
+run_stage "$test_timeout" logs/test.log bash "$project/scripts/uart-job.sh" \
+    "$project/build/fpga-uart" "$uart_device" "$uart_timeout" vectors "$commands" "$replies"
+report=$work/observations.json
+if ! safe_file "$replies"; then replies=/dev/null; fi
+jq -cn --slurpfile vectors "$vectors" --rawfile replies "$replies" \
+    -f "$project/scripts/observations.jq" > "$report" ||
+    finish_run internal_error testing observation_read_failed 'Cannot read UART observations'
+compare_observations "$report"
+case "$stage_result" in
+    0) jq -e '.complete' "$report" >/dev/null ||
+           finish_run board_error testing incomplete_observations 'UART did not return all observations' ;;
+    1|124) finish_run board_error testing uart_test_failed 'UART test ended before all vectors completed' ;;
+    129|130|143) finish_run internal_error testing interrupted 'UART testing was interrupted' ;;
+    *) finish_run internal_error testing stage_failed 'Could not run the UART test' ;;
+esac
+finish_comparison
