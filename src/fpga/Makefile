@@ -8,6 +8,11 @@ SHELL_FILES := bin/fpga-dispatch bin/fpga-run $(wildcard scripts/*.sh tests/*.sh
 C_FILES := $(wildcard src/uart/*.c src/runner/*.c tests/*.c)
 IVERILOG ?= iverilog
 VVP ?= vvp
+QUARTUS_SH ?= quartus_sh
+
+.PHONY: build-jtag-probe
+build-jtag-probe:
+	cd quartus && "$(QUARTUS_SH)" --flow compile jtag_probe
 
 .PHONY: all test lint syntax
 all: syntax build/test-serial build/fpga-uart build/fpga-uart-stimulus build/fpga-stage
@@ -97,8 +102,13 @@ probe-vendor:
 test-contract:
 	@bash tests/contract.sh
 
-.PHONY: test-clock test-hdl
-test-hdl: test-simulator test-led test-clock test-clock-board test-uart-rx test-uart-tx test-uart-commands test-dut-control test-wrapper
+.PHONY: test-clock test-hdl test-jtag-snapshot
+test-hdl: test-simulator test-led test-clock test-clock-board test-uart-rx test-uart-tx test-uart-commands test-dut-control test-wrapper test-jtag-snapshot
+
+test-jtag-snapshot:
+	@mkdir -p build
+	$(IVERILOG) -g2001 -Wall -s tb_jtag_snapshot -o build/tb_jtag_snapshot tests/tb_jtag_snapshot.v hdl/jtag_snapshot.v
+	$(VVP) build/tb_jtag_snapshot
 
 WRAPPER_HDL := hdl/fpga_wrapper.v hdl/dut_control.v hdl/clock_burst.v hdl/uart_service.v hdl/uart_commands.v hdl/uart_rx.v hdl/uart_tx.v
 .PHONY: test-wrapper
