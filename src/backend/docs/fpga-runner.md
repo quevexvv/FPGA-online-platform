@@ -15,6 +15,11 @@ Runner доставляет пакет, вызывает `fpga-dispatch submit`,
 Для аппаратного запуска оператор подготавливает Quartus, плату, UART, конфигурацию
 и пользовательский systemd версии 254 или новее.
 
+Размещайте каталог заданий на дисковой файловой системе с достаточным
+свободным местом. Если `/tmp` смонтирован как tmpfs, доступное там место
+оценивается отдельно от места на диске. Исполнитель проверяет
+[резерв для сборки](../../fpga/docs/pilot-limits.md) на файловой системе заданий.
+
 Из `src/backend`, после подстановки действительных абсолютных путей:
 
 ```bash
@@ -163,18 +168,23 @@ http://localhost:8000/docs через POST /auth/register, затем войти
 ```bash
 source .venv/bin/activate
 export DATABASE_URL="sqlite:///$(pwd)/fpga-integration.sqlite3"
+build_root="$(cd ../fpga && pwd)/build"
+mkdir -p -- "$build_root"
+jobs_root=$(mktemp -d "$build_root/acceptance.XXXXXXXX")
+mkdir -m 700 -- "$jobs_root/incoming"
 python -m app.integrations.fpga.runner \
   --run-id UUID_ИЗ_ОТВЕТА_API \
   --bindings "$HOME/.local/share/fpga-platform/counter-bindings.json" \
   --dispatcher "$(cd ../fpga && pwd)/bin/fpga-dispatch" \
-  --jobs-root /АБСОЛЮТНЫЙ/ПУТЬ/К/КАТАЛОГУ/ЗАДАНИЙ \
+  --jobs-root "$jobs_root" \
   --run-config /АБСОЛЮТНЫЙ/ПУТЬ/К/integration.json \
   --public-vector-index 0 \
   --max-wait 1800
 ```
 
-Заменить UUID и два пути. jobs-root и его incoming должны существовать и быть
-доступны только оператору; использовать выделенный каталог для этой приёмки.
+Подставьте UUID и абсолютный путь к конфигурации. Пример создаёт отдельный
+каталог заданий внутри `build`. Для повторного опроса той же попытки
+используйте сохранённый `jobs_root`.
 integration.json должен содержать реальные Quartus, USB-Blaster, UART и лимиты.
 Вызывать от пользователя с рабочим `systemctl --user`. Не ставить manual для
 обычного прогона: иначе fpga-run автоматически не запустится.
@@ -195,6 +205,9 @@ integration.json должен содержать реальные Quartus, USB-B
 
 При ошибке не менять run_id для той же попытки. Проверить журналы
 `journalctl --user -u fpga-run-<run_id>.service` и output/logs.
+Если попытка завершилась с `disk_space_low`, проверьте свободное место через
+`df -h -- "$jobs_root"`. После выбора подходящего раздела отправьте решение
+заново и используйте новый `run_id`.
 Для разбора прислать run_id, state/stage/result_status из API и текст ошибки
 сборки/запуска без паролей и токенов. Если runner достиг max-wait, сервис не отменён:
 повторить ту же команду. До автоматической очереди запускать только одну попытку
