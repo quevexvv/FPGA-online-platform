@@ -99,4 +99,16 @@ for tool in jq mv; do
     reject 2 status "$failure"
 done
 submit "$failure" hardware | jq -e '.disposition == "accepted"' >/dev/null
+
+bad_hdl=aaaaaaaa-bbbb-cccc-dddd-000000000005
+upload "$bad_hdl"
+printf '%s\n' 'module student_top;' > "$incoming/$bad_hdl/src/student_top.v"
+# Terminal HDL failures need no systemd service or physical stand.
+FPGA_DISPATCH_LAUNCH=systemd submit "$bad_hdl" hardware | jq -e '.disposition == "accepted"' >/dev/null
+status "$bad_hdl" | jq -e '.state == "finished" and .result_status == "invalid_input"' >/dev/null
+jq -e --arg kind result -f scripts/contract.jq "$runs/$bad_hdl/output/result.json" >/dev/null
+jq -e '.error.code == "hdl_invalid" and (.hardware_verified | not)' \
+    "$runs/$bad_hdl/output/result.json" >/dev/null
+submit "$bad_hdl" hardware | jq -e '.disposition == "existing"' >/dev/null
+[[ ! -e $runs/$bad_hdl/control/started && ! -e $incoming/$bad_hdl ]]
 echo 'PASS: submit, status, concurrent retry and registration rollback'

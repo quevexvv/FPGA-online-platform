@@ -15,9 +15,9 @@ upload() {
 }
 
 reject() {
-    local code=0 message
+    local expected=${2:-2} code=0 message
     message=$(bash scripts/prepare-job.sh "$input" "$work" "$id" 2>&1) || code=$?
-    if [[ $code != 2 || $message != *"invalid_input: $1"* || -e $work/quartus ]]; then
+    if [[ $code != "$expected" || $message != *"invalid_input: $1"* || -e $work/quartus ]]; then
         printf 'FAIL: expected invalid_input for %s, got %s: %s\n' "$input" "$code" "$message" >&2
         exit 1
     fi
@@ -74,13 +74,27 @@ touch -- "$input/wrapper_base.qsf"
 reject 'upload contains undeclared files'
 upload include
 printf '\140include "/outside.v"\n' >> "$input/src/student_top.v"
-reject 'external file references'
+reject 'external file references' 3
 upload duplicate-module
 cat hdl/fpga_wrapper.v >> "$input/src/student_top.v"
-reject 'HDL does not elaborate'
+reject 'HDL does not elaborate' 3
 upload port-width
 sed 's/\[9:0\]/[8:0]/' examples/counter/student_top.v > "$input/src/student_top.v"
-reject 'HDL does not elaborate'
+reject 'student_top has incorrect ports' 3
+upload output-direction
+cat > "$input/src/student_top.v" <<'VERILOG'
+module student_top(input clk, reset, input [9:0] din, input [17:0] dout);
+endmodule
+VERILOG
+reject 'student_top has incorrect ports' 3
+upload input-direction
+cat > "$input/src/student_top.v" <<'VERILOG'
+module student_top(input clk, reset, output [9:0] din, output [17:0] dout);
+assign din = 0;
+assign dout = 0;
+endmodule
+VERILOG
+reject 'student_top has incorrect ports' 3
 
 upload limits
 jq '.sources += [range(1;16) | "src/extra-\(.).v"]' examples/manifest.json > "$input/manifest.json"

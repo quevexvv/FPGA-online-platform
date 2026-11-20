@@ -20,6 +20,7 @@ from app.modules.labs.seed import DEMO_LAB_ID, seed_demo
 from app.modules.runs.models import Run
 from app.modules.runs.schemas import ExecutorResult, ExecutorStatus
 from app.modules.runs.service import configure_public_vectors
+from app.modules.submissions.models import Submission
 
 pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="Linux dispatcher host required")
 FPGA = Path(__file__).resolve().parents[2] / "fpga"
@@ -298,6 +299,27 @@ def test_real_mock_dispatcher_to_database_to_owned_http_result(saved, jobs):
     http.post("/auth/register", json=account)
     http.post("/auth/login", json={k: account[k] for k in ("email", "password")})
     assert http.get(f"/submissions/{submission_id}/run").status_code == 404
+
+
+@pytest.mark.skipif(
+    not (shutil.which("jq") and shutil.which("iverilog")), reason="jq and Icarus Verilog required"
+)
+def test_invalid_hdl_reaches_a_terminal_result_in_the_owned_api(saved, jobs):
+    http, engine, run_id, submission_id, bindings, _ = saved
+    with http.app.state.session_factory() as db:
+        db.get(Submission, UUID(submission_id)).source_code = "module student_top;"
+        db.commit()
+
+    client = DispatcherClient(FPGA / "bin/fpga-dispatch", jobs)
+    assert advance_run(engine, client, bindings, run_id, [0]) == "finished"
+    assert advance_run(engine, client, bindings, run_id, [0]) == "finished"
+    response = http.get(f"/submissions/{submission_id}/run")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["state"] == "finished"
+    assert data["result_status"] == "invalid_input"
+    assert data["hardware_verified"] is False
+    assert data["tests"] == []
 
 
 def test_cli_once_persists_starting_snapshot(saved, jobs, tmp_path, monkeypatch):

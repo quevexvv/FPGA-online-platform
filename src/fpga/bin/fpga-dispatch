@@ -195,7 +195,13 @@ trap 'exit 143' TERM
 
 mv -T -- "$upload" "$pending/upload"
 mkdir -p -- "$ready/work" "$ready/output/logs" "$ready/control"
-bash "$project/scripts/prepare-job.sh" "$pending/upload" "$ready/work" "$run_id" "$mode"
+preparation=0
+bash "$project/scripts/prepare-job.sh" "$pending/upload" "$ready/work" "$run_id" "$mode" || preparation=$?
+# Invalid HDL is a completed submission. Invalid packages remain unregistered.
+case "$preparation" in
+    0|3) ;;
+    *) exit "$preparation" ;;
+esac
 cp -R -- "$pending/upload" "$ready/input"
 chmod -R u+rX,a-w,go-rwx -- "$ready/input"
 jq -cn --arg id "$run_id" --arg mode "$mode" \
@@ -204,10 +210,15 @@ read -r boot_id < /proc/sys/kernel/random/boot_id
 jq -cn --arg launch "$launch" --arg boot_id "$boot_id" \
     '{launch:$launch,boot_id:$boot_id}' > "$ready/control/launch.json"
 publish_run_status "$ready/output" "$run_id" "$mode" '' starting dispatch
+if [[ $preparation == 3 ]]; then
+    publish_run_result "$ready/output" "$run_id" "$mode" '' invalid_input validating \
+        hdl_invalid 'HDL violates the source rules or required student_top interface'
+    rmdir -- "$ready/work"
+fi
 
 mv -T -- "$ready" "$run"
 trap - EXIT
-if [[ $launch == systemd ]]; then
+if [[ $launch == systemd && $preparation == 0 ]]; then
     # The dispatcher keeps the ID lock until launch succeeds or the failure is published.
     if ! (
         exec {lock_fd}>&-
