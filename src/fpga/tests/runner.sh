@@ -20,12 +20,25 @@ cleanup() {
 }
 trap cleanup EXIT
 export FPGA_JOBS_ROOT=$root/'jobs root'
+export TEST_OPERATOR_HOME=$root/'operator home'
 unset FPGA_RUN_CONFIG
-mkdir -p -- "$FPGA_JOBS_ROOT/incoming"
+mkdir -p -- "$FPGA_JOBS_ROOT/incoming" "$TEST_OPERATOR_HOME" "$root/bin"
+chmod 700 -- "$TEST_OPERATOR_HOME"
+# Keep the account-scoped lock fixture outside all job trees and the real home.
+cat > "$root/bin/getent" <<'GETENT'
+#!/usr/bin/env bash
+set -eu
+[[ $# -eq 2 && $1 == passwd && $2 == "$EUID" ]]
+printf 'fpga-test:x:%s:0::%s:/bin/bash\n' "$EUID" "$TEST_OPERATOR_HOME"
+GETENT
+chmod +x -- "$root/bin/getent"
+export PATH="$root/bin:$PATH"
+stand_lock=$TEST_OPERATOR_HOME/.fpga-stand-lock
 runs=$FPGA_JOBS_ROOT/runs
 first=aaaaaaaa-bbbb-cccc-dddd-000000000001
 second=aaaaaaaa-bbbb-cccc-dddd-000000000002
 third=aaaaaaaa-bbbb-cccc-dddd-000000000003
+fourth=aaaaaaaa-bbbb-cccc-dddd-000000000004
 
 register() {
     local id=$1 upload=$FPGA_JOBS_ROOT/incoming/$1
@@ -60,7 +73,8 @@ reject bin/fpga-run --job "$runs/$first/input" --output "$runs/$second/output" -
 [[ ! -e $runs/$first/control/started ]]
 
 # Hold a lock with another open file description, outside the runner.
-exec {held}>> "$runs/.stand.lock"
+mkdir -m 700 -- "$stand_lock"
+exec {held}< "$stand_lock"
 flock -x "$held"
 run "$first" hardware
 run "$second" hardware
@@ -74,7 +88,16 @@ reject run "$first" hardware
 register "$third"
 run "$third" hardware
 check_result "$third" internal_error
-flock -n "$runs/.stand.lock" true
+flock -n "$stand_lock" true
+
+register "$fourth"
+mv -- "$stand_lock" "$stand_lock.real"
+ln -s -- "$stand_lock.real" "$stand_lock"
+run "$fourth" hardware
+check_result "$fourth" internal_error
+jq -e '.error.code == "stand_lock_error"' "$runs/$fourth/output/result.json" >/dev/null
+rm -- "$stand_lock"
+rmdir -- "$stand_lock.real"
 echo 'PASS: executor registration, busy result and lock release'
 
 tool=$root/'fake quartus'
@@ -87,10 +110,40 @@ set -euo pipefail
 [[ $# -eq 3 && $1 == --flow && $2 == compile && $3 == job && ! -v FPGA_TEST_PRIVATE ]]
 [[ -d $HOME && -d $TMPDIR && -f job.qpf ]]
 echo 'quartus started'
-case $(< scenario) in
-    ok)
+scenario=$(< scenario)
+case "$scenario" in
+    ok|negative-slack|negative-tns|missing-timing|bad-timing|incomplete-timing)
         mkdir output_files
         echo 'test artifact' > output_files/job.sof
+        if [[ $scenario == missing-timing ]]; then exit 0; fi
+        slack=9.813 tns=0.000
+        if [[ $scenario == negative-slack ]]; then slack=-0.100; fi
+        if [[ $scenario == negative-tns ]]; then tns=-0.100; fi
+        if [[ $scenario == bad-timing ]]; then slack=invalid; fi
+        cat > output_files/job.sta.summary <<SUMMARY
+------------------------------------------------------------
+Timing Analyzer Summary
+------------------------------------------------------------
+
+Type  : Slow 1100mV 85C Model Setup 'clk'
+Slack : $slack
+TNS   : 0.000
+
+Type  : Slow 1100mV 85C Model Hold 'clk'
+Slack : 0.000
+TNS   : $tns
+
+Type  : Fast 1100mV 0C Model Minimum Pulse Width 'clk'
+Slack : 8.555
+TNS   : 0.000
+
+------------------------------------------------------------
+SUMMARY
+        printf '%s\n' 'Timing Analyzer report for job' > output_files/job.sta.rpt
+        if [[ $scenario != incomplete-timing ]]; then
+            printf '%s\n' 'Info: Quartus Prime Timing Analyzer was successful. 0 errors, 1 warning' \
+                >> output_files/job.sta.rpt
+        fi
         ;;
     fail) exit 9 ;;
     missing) mkdir output_files ;;
@@ -119,10 +172,10 @@ chmod +x -- "$programmer"
 
 config() {
     jq -cn --arg executable "$tool" --arg programmer "$programmer" \
-        --argjson timeout "$1" --arg port "${2:-/dev/null}" '
+        --argjson timeout "$1" --arg port "${2:-/dev/null}" --argjson log_limit "${3:-2048}" '
         {quartus_sh:$executable,quartus_pgm:$programmer,jtag_cable:"USB-Blaster [test]",
          jtag_device_index:1,uart_device:$port,build_timeout_ms:$timeout,program_timeout_ms:2000,
-         uart_ready_timeout_ms:300,uart_timeout_ms:100,test_timeout_ms:2000,max_log_bytes:2048}
+         uart_ready_timeout_ms:300,uart_timeout_ms:100,test_timeout_ms:2000,max_log_bytes:$log_limit}
     ' > "$FPGA_RUN_CONFIG"
 }
 prepare_build() {
@@ -150,10 +203,20 @@ done
 escaped_pid=$(<"$running_project/escaped")
 bin/fpga-dispatch status --run-id "$holding" |
     jq -e '.state == "running" and .stage == "building"' >/dev/null
-prepare_build 11 ok
-run "$id" hardware
-check_result "$id" busy
-[[ ! -e $runs/$id/output/logs/build.log ]]
+check_cross_root_busy() {
+    local FPGA_JOBS_ROOT=$root/'other jobs root'
+    local HOME=$root/'other home' FPGA_RUN_CONFIG=$root/'other config.json'
+    local runs=$FPGA_JOBS_ROOT/runs id project
+    export FPGA_JOBS_ROOT HOME FPGA_RUN_CONFIG
+    mkdir -p -- "$FPGA_JOBS_ROOT/incoming" "$HOME"
+    config 10000
+    prepare_build 11 ok
+    run "$id" hardware
+    check_result "$id" busy
+    check_code "$id" stand_busy
+    [[ ! -e $runs/$id/output/logs/build.log ]]
+}
+check_cross_root_busy
 kill -TERM "$active"
 wait "$active"
 active=
@@ -161,7 +224,7 @@ check_result "$holding" internal_error
 check_code "$holding" interrupted
 ! kill -0 "$escaped_pid" 2>/dev/null || exit 1
 [[ ! -e $runs/$holding/work ]]
-flock -n "$runs/.stand.lock" true
+flock -n "$stand_lock" true
 
 prepare_build 12 ok
 run "$id" hardware
@@ -169,8 +232,32 @@ check_result "$id" board_error
 check_code "$id" uart_not_ready
 [[ ! -e $runs/$id/work ]]
 grep -Fxq 'quartus started' "$runs/$id/output/logs/build.log"
+grep -Fxq 'TimeQuest: 3 checks, minimum slack 0.000 ns, minimum TNS 0.000 ns' "$runs/$id/output/logs/timing.log"
+jq -e '.logs | index("logs/timing.log") != null' "$runs/$id/output/result.json" >/dev/null
 grep -Fxq 'programmer started' "$runs/$id/output/logs/program.log"
 grep -q 'transport:open' "$runs/$id/output/logs/uart.log"
+
+for scenario in negative-slack negative-tns missing-timing bad-timing incomplete-timing; do
+    case "$scenario" in
+        negative-slack) prepare_build 29 "$scenario"; code=timing_failed ;;
+        negative-tns) prepare_build 30 "$scenario"; code=timing_failed ;;
+        missing-timing) prepare_build 31 "$scenario"; code=timing_report_invalid ;;
+        bad-timing) prepare_build 32 "$scenario"; code=timing_report_invalid ;;
+        incomplete-timing) prepare_build 33 "$scenario"; code=timing_report_invalid ;;
+    esac
+    run "$id" hardware
+    check_result "$id" build_error
+    check_code "$id" "$code"
+    [[ ! -e $runs/$id/output/logs/program.log ]]
+done
+config 2000 /dev/null 12
+prepare_build 34 ok
+run "$id" hardware
+check_result "$id" board_error
+check_code "$id" uart_not_ready
+[[ $(wc -c < "$runs/$id/output/logs/timing.log") -eq 12 ]]
+config 10000
+echo 'PASS: TimeQuest gate, retained timing summary and log cap'
 
 for scenario in fail missing linked; do
     case "$scenario" in
@@ -200,8 +287,8 @@ check_code "$id" build_timeout
 escaped_pid=$(sed -n '2p' "$runs/$id/output/logs/build.log")
 [[ $escaped_pid =~ ^[0-9]+$ ]]
 ! kill -0 "$escaped_pid" 2>/dev/null || exit 1
-flock -n "$runs/.stand.lock" true
-echo 'PASS: Quartus stage, active stand lock, failure, timeout and stale artifact'
+flock -n "$stand_lock" true
+echo 'PASS: Quartus stage, shared stand lock across jobs roots, failure, timeout and stale artifact'
 
 config 2000
 mkdir -- "$root/limits-bin"
@@ -214,8 +301,8 @@ cat > "$root/limits-bin/du" <<'WORK'
 printf '%s\t%s\n' "$TEST_WORK_KIB" "${!#}"
 WORK
 chmod +x -- "$root/limits-bin/"{df,du}
-# The fixture logs are capped at 2048 bytes each.
-required_kib=$((2176 * 1024 + 8))
+# The five fixture logs are capped at 2048 bytes each.
+required_kib=$((2176 * 1024 + 10))
 prepare_build 26 ok
 PATH="$root/limits-bin:$PATH" TEST_AVAILABLE_KIB=$((required_kib - 1)) run "$id" hardware
 check_result "$id" internal_error

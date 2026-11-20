@@ -76,12 +76,36 @@ finish_run() {
     exit 0
 }
 
-stand_lock_path=$runs/.stand.lock
-if [[ -L $stand_lock_path || ( -e $stand_lock_path && ! -f $stand_lock_path ) ]]; then
-    finish_run internal_error locking stand_lock_error 'Stand lock path is unsafe'
-fi
-if ! exec {stand_lock}>> "$stand_lock_path"; then
-    finish_run internal_error locking stand_lock_error 'Cannot open the stand lock'
+if [[ $mode == hardware ]]; then
+    # Manual and systemd launches use the same operator account and lock inode.
+    account=$(getent passwd "$EUID") ||
+        finish_run internal_error locking stand_lock_error 'Cannot look up the stand operator'
+    IFS=: read -r _ _ operator_uid _ _ operator_home _ <<< "$account"
+    if [[ $operator_uid != "$EUID" || $operator_home != /* || $operator_home == / ||
+          ! -d $operator_home ]]; then
+        finish_run internal_error locking stand_lock_error 'Stand operator home is invalid'
+    fi
+    home_info=$(stat -Lc '%u %a' -- "$operator_home") ||
+        finish_run internal_error locking stand_lock_error 'Cannot inspect the stand operator home'
+    read -r home_owner home_mode <<< "$home_info"
+    if [[ $home_owner != "$EUID" || ! $home_mode =~ ^[0-7]{3,4}$ ]] ||
+            (( (8#$home_mode & 022) != 0 )); then
+        finish_run internal_error locking stand_lock_error 'Stand operator home is unsafe'
+    fi
+    stand_lock_path=$operator_home/.fpga-stand-lock
+    mkdir -m 700 -- "$stand_lock_path" 2>/dev/null || :
+    if ! safe_dir "$stand_lock_path" || [[ $(stat -c '%u %a' -- "$stand_lock_path") != "$EUID 700" ]] ||
+            ! exec {stand_lock}< "$stand_lock_path"; then
+        finish_run internal_error locking stand_lock_error 'Cannot open a private stand lock directory'
+    fi
+else
+    stand_lock_path=$runs/.stand.lock
+    if ! optional_file "$stand_lock_path"; then
+        finish_run internal_error locking stand_lock_error 'Stand lock path is unsafe'
+    fi
+    if ! exec {stand_lock}>> "$stand_lock_path"; then
+        finish_run internal_error locking stand_lock_error 'Cannot open the stand lock'
+    fi
 fi
 lock_result=0
 flock -n -E 75 "$stand_lock" || lock_result=$?
@@ -196,9 +220,9 @@ if [[ -e $artifacts || -L $artifacts ]]; then
 fi
 available_kib=$(df --output=avail -k -- "$work" | awk 'NR == 2 {print $1}') ||
     finish_run internal_error building disk_check_failed 'Cannot read available space for Quartus'
-# Leave 2 GiB for the host, plus the workspace budget and the four capped logs.
+# Leave 2 GiB for the host, plus the workspace budget and the five capped logs.
 workspace_kib=$((128 * 1024))
-required_kib=$((2 * 1024 * 1024 + workspace_kib + 4 * ((max_log + 1023) / 1024)))
+required_kib=$((2 * 1024 * 1024 + workspace_kib + 5 * ((max_log + 1023) / 1024)))
 if [[ ! $available_kib =~ ^[0-9]+$ ]] || (( available_kib < required_kib )); then
     finish_run internal_error building disk_space_low 'Insufficient space for Quartus and host reserve'
 fi
@@ -248,6 +272,29 @@ sof=$artifacts/job.sof
 if ! safe_dir "$artifacts" || ! safe_file "$sof" || [[ ! -s $sof || $(stat -c %h -- "$sof") != 1 ]]; then
     finish_run build_error building missing_sof 'Quartus did not create a new job.sof'
 fi
+
+sta_summary=$artifacts/job.sta.summary
+sta_report=$artifacts/job.sta.rpt
+for report_file in "$sta_summary" "$sta_report"; do
+    if ! safe_file "$report_file" || [[ ! -s $report_file ]] ||
+            ! read -r links size < <(stat -c '%h %s' -- "$report_file") ||
+            [[ $links != 1 ]] || (( size > workspace_kib * 1024 )); then
+        finish_run build_error building timing_report_invalid 'Quartus did not create usable TimeQuest reports'
+    fi
+done
+timing_result=0
+timing_summary=$(LC_ALL=C awk -f "$project/scripts/check-timing.awk" "$sta_summary" "$sta_report") ||
+    timing_result=$?
+timing_summary+=$'\n'
+if ! (set -o noclobber; printf '%s' "${timing_summary:0:max_log}" > "$output/logs/timing.log"); then
+    finish_run internal_error building timing_log_failed 'Cannot save the TimeQuest summary'
+fi
+case "$timing_result" in
+    0) ;;
+    1) finish_run build_error building timing_failed 'TimeQuest reported negative slack or TNS' ;;
+    *) finish_run build_error building timing_report_invalid 'TimeQuest reports are invalid or incomplete' ;;
+esac
+
 publish_stage programming
 run_stage "$program_timeout" logs/program.log "$programmer" -c "$cable" -m JTAG \
     -o "p;output_files/job.sof@$device_index"

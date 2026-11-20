@@ -2,16 +2,17 @@
 # The caller holds the registration and activity locks for this run.
 reconcile_run() {
     local run=$1 id=$2 mode=$3 contract=$4
-    local output=$run/output state stage started result_status updated
+    local output=$run/output state stage started result_status updated status_finished
     local code message fields launch registered_boot current_boot active
     optional_file "$output/result.json" || return 1
     fields=$(jq -ers --arg id "$id" --arg mode "$mode" '
         select(length == 1) | .[0] |
         select(.schema_version == 1 and .run_id == $id and .mode == $mode
             and (.state == "starting" or .state == "running" or .state == "finished")) |
-        [.state, .stage, (.started_at // "-"), (.result_status // "-"), .updated_at] | @tsv
+        [.state, .stage, (.started_at // "-"), (.result_status // "-"), .updated_at,
+         (.finished_at | strings // "-")] | @tsv
     ' "$output/status.json") || return 1
-    IFS=$'\t' read -r state stage started result_status updated <<< "$fields"
+    IFS=$'\t' read -r state stage started result_status updated status_finished <<< "$fields"
     [[ $started != - ]] || started=
 
     if safe_file "$output/result.json"; then
@@ -23,8 +24,9 @@ reconcile_run() {
             local final_status final_started finished
             IFS=$'\t' read -r final_status final_started finished <<< "$fields"
             [[ $final_started != - ]] || final_started=
-            if [[ $state != finished || $result_status != "$final_status" ||
-                  $started != "$final_started" || $updated != "$finished" ]]; then
+            if [[ $state != finished || $stage != finalizing || $result_status != "$final_status" ||
+                  $started != "$final_started" || $status_finished != "$finished" ||
+                  $updated != "$finished" ]]; then
                 publish_run_status "$output" "$id" "$mode" "$final_started" \
                     finished finalizing "$final_status" "$finished" || return 1
             fi

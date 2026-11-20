@@ -12,6 +12,11 @@ invalid() {
     exit 2
 }
 
+invalid_hdl() {
+    printf 'invalid_input: %s\n' "$1" >&2
+    exit 3
+}
+
 # The dispatcher owns this directory after the backend closes the upload.
 [[ -d $input && ! -L $input ]] || invalid 'expected an upload directory'
 unsafe=$(find -P "$input" ! -type d ! \( -type f -links 1 \) -printf x -quit)
@@ -54,7 +59,7 @@ for path in "${sources[@]}"; do
     total_bytes=$((total_bytes + source_bytes))
     (( total_bytes <= 65536 )) || invalid 'sources exceed 65536 bytes in total'
     if LC_ALL=C grep -Eq '`[[:space:]]*include|[$]readmem[bh]' "$input/$path"; then
-        invalid "external file references are unsupported: $path"
+        invalid_hdl "external file references are unsupported: $path"
     elif [[ $? -ne 1 ]]; then
         exit 1
     fi
@@ -75,11 +80,46 @@ for module in "${wrapper[@]}"; do
 done
 compiler=${IVERILOG:-iverilog}
 command -v "$compiler" >/dev/null || { echo 'prepare-job: Icarus Verilog is missing' >&2; exit 1; }
-# Elaborate only. Icarus can exit successfully after padding or pruning a port.
-if ! diagnostics=$(env -i PATH="$PATH" LC_ALL=C timeout -k 2s 10s "$compiler" \
-    -g2001 -DSYNTHESIS -t null -s fpga_wrapper "${wrapper_files[@]}" "${source_files[@]}" 2>&1) ||
-    [[ $diagnostics == *'expects '* || $diagnostics == *'coerced to inout'* ]]; then
-    invalid 'HDL does not elaborate against the student_top interface'
+# Read the elaborated port declarations. Keep the generated program as data.
+netlist=$(mktemp -- "$work/.ports.XXXXXXXX")
+trap 'rm -f -- "$netlist"' EXIT
+compile_status=0
+(
+    ulimit -f 16384
+    exec env -i PATH="$PATH" LC_ALL=C timeout -k 2s 10s "$compiler" \
+        -g2001 -DSYNTHESIS -t vvp -o "$netlist" -s fpga_wrapper \
+        "${wrapper_files[@]}" "${source_files[@]}" >/dev/null 2>&1
+) || compile_status=$?
+case "$compile_status" in
+    0) ;;
+    125|126|127)
+        echo 'prepare-job: cannot invoke Icarus Verilog' >&2
+        exit 1
+        ;;
+    *)
+        invalid_hdl 'HDL does not elaborate against the student_top interface'
+        ;;
+esac
+if ! awk '
+    BEGIN {
+        expected["\"clk\";"] = "/INPUT 1"
+        expected["\"reset\";"] = "/INPUT 1"
+        expected["\"din\";"] = "/INPUT 10"
+        expected["\"dout\";"] = "/OUTPUT 18"
+    }
+    $2 == ".scope" {
+        if ($3 == "module," && $4 == "\"fpga_wrapper\"" && $5 == "\"fpga_wrapper\"" &&
+            wrapper == "") wrapper = $1
+        student = wrapper != "" && $3 == "module," && $4 == "\"student\"" &&
+            $5 == "\"student_top\"" && $NF == wrapper ";"
+    }
+    student && $1 == ".port_info" {
+        if (!($5 in expected) || expected[$5] != $3 " " $4 || seen[$5]++) invalid = 1
+        count++
+    }
+    END { exit(invalid || count != 4) }
+' "$netlist"; then
+    invalid_hdl 'student_top has incorrect ports'
 fi
 
 mkdir -- "$work/hdl" "$work/quartus"
