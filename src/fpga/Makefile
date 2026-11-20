@@ -10,7 +10,7 @@ IVERILOG ?= iverilog
 VVP ?= vvp
 
 .PHONY: all test lint syntax
-all: syntax build/test-serial build/fpga-uart build/fpga-stage
+all: syntax build/test-serial build/fpga-uart build/fpga-uart-stimulus build/fpga-stage
 	@test -x bin/fpga-dispatch && test -x bin/fpga-run
 	@echo 'Host checks built; the dispatcher supports job registration.'
 
@@ -43,13 +43,20 @@ build/test-serial: tests/serial.c src/uart/serial.c src/uart/serial.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/serial.c src/uart/serial.c -o $@
 
 .PHONY: test-serial
-test-serial: build/test-serial
+test-serial: build/test-serial build/fpga-uart-stimulus
 	./build/test-serial
+	@./build/fpga-uart-stimulus --help >/dev/null
+	@for hex in '' 0 gg; do ./build/fpga-uart-stimulus /dev/null even "$$hex" 1 2>/dev/null; test $$? -eq 2 || exit 1; done
+	@for count in '' -1 65; do ./build/fpga-uart-stimulus /dev/null odd 00 "$$count" 2>/dev/null; test $$? -eq 2 || exit 1; done
 	@echo 'PASS: serial PTY transport'
 
 build/fpga-uart: src/uart/session.c src/uart/serial.c src/uart/serial.h
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) src/uart/session.c src/uart/serial.c -o $@
+
+build/fpga-uart-stimulus: src/uart/stimulus.c src/uart/serial.c src/uart/serial.h
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) $(CFLAGS) src/uart/stimulus.c src/uart/serial.c -o $@
 
 build/test-session: tests/session.c
 	@mkdir -p build
@@ -151,3 +158,17 @@ test-uart-tx:
 	$(VVP) build/tb_uart_tx
 	$(IVERILOG) -g2001 -Wall -s tb_uart_tx -Ptb_uart_tx.CLKS_PER_BIT=434 -o build/tb_uart_tx_434 tests/tb_uart_tx.v hdl/uart_tx.v
 	$(VVP) build/tb_uart_tx_434
+
+.PHONY: build-lab3-uart-probe test-lab3-uart-probe test-lab3-uart-hardware
+build-lab3-uart-probe:
+	cd quartus && "$${QUARTUS_SH:-quartus_sh}" --flow compile lab3_uart_probe
+
+test-hdl: test-lab3-uart-probe
+
+test-lab3-uart-probe:
+	@mkdir -p build
+	$(IVERILOG) -g2001 -Wall -s tb_lab3_uart_probe -o build/tb_lab3_uart_probe tests/tb_lab3_uart_probe.v hdl/lab3_uart_probe.v hdl/uart_rx.v hdl/uart_tx.v
+	$(VVP) build/tb_lab3_uart_probe
+
+test-lab3-uart-hardware: build/fpga-uart-stimulus
+	@bash tests/lab3-uart-hardware.sh "$${UART_PORT:-}"
