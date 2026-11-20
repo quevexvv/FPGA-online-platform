@@ -8,6 +8,11 @@ SHELL_FILES := bin/fpga-dispatch bin/fpga-run $(wildcard scripts/*.sh tests/*.sh
 C_FILES := $(wildcard src/uart/*.c src/runner/*.c tests/*.c)
 IVERILOG ?= iverilog
 VVP ?= vvp
+QUARTUS_SH ?= quartus_sh
+
+.PHONY: build-jtag-probe
+build-jtag-probe:
+	cd quartus && "$(QUARTUS_SH)" --flow compile jtag_probe
 
 .PHONY: all test lint syntax
 all: syntax build/test-serial build/fpga-uart build/fpga-stage

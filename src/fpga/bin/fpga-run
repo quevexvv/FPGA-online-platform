@@ -31,6 +31,8 @@ umask 077
 project=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 # shellcheck source=scripts/run-state.sh
 source "$project/scripts/run-state.sh"
+# shellcheck source=scripts/stand-lock.sh
+source "$project/scripts/stand-lock.sh"
 runs=$root/runs
 run=$runs/$id
 output=$run/output
@@ -78,26 +80,8 @@ finish_run() {
 
 if [[ $mode == hardware ]]; then
     # Manual and systemd launches use the same operator account and lock inode.
-    account=$(getent passwd "$EUID") ||
-        finish_run internal_error locking stand_lock_error 'Cannot look up the stand operator'
-    IFS=: read -r _ _ operator_uid _ _ operator_home _ <<< "$account"
-    if [[ $operator_uid != "$EUID" || $operator_home != /* || $operator_home == / ||
-          ! -d $operator_home ]]; then
-        finish_run internal_error locking stand_lock_error 'Stand operator home is invalid'
-    fi
-    home_info=$(stat -Lc '%u %a' -- "$operator_home") ||
-        finish_run internal_error locking stand_lock_error 'Cannot inspect the stand operator home'
-    read -r home_owner home_mode <<< "$home_info"
-    if [[ $home_owner != "$EUID" || ! $home_mode =~ ^[0-7]{3,4}$ ]] ||
-            (( (8#$home_mode & 022) != 0 )); then
-        finish_run internal_error locking stand_lock_error 'Stand operator home is unsafe'
-    fi
-    stand_lock_path=$operator_home/.fpga-stand-lock
-    mkdir -m 700 -- "$stand_lock_path" 2>/dev/null || :
-    if ! safe_dir "$stand_lock_path" || [[ $(stat -c '%u %a' -- "$stand_lock_path") != "$EUID 700" ]] ||
-            ! exec {stand_lock}< "$stand_lock_path"; then
-        finish_run internal_error locking stand_lock_error 'Cannot open a private stand lock directory'
-    fi
+    open_hardware_stand_lock ||
+        finish_run internal_error locking stand_lock_error "$hardware_lock_error"
 else
     stand_lock_path=$runs/.stand.lock
     if ! optional_file "$stand_lock_path"; then

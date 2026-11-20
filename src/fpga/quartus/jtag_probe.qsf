@@ -1,0 +1,16 @@
+set_global_assignment -name FAMILY "Cyclone V"
+set_global_assignment -name DEVICE 5CGXFC5C6F27C7
+set_global_assignment -name TOP_LEVEL_ENTITY jtag_probe
+set_global_assignment -name VERILOG_FILE ../hdl/jtag_probe.v
+set_global_assignment -name SDC_FILE blink.sdc
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY ../build/jtag-probe
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS "AS INPUT TRI-STATED"
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS_NO_OUTPUT_GND "AS INPUT TRI-STATED"
+
+# Same 50 MHz clock and LEDG0 pins as the trusted blink project.
+set_location_assignment PIN_R20 -to clk
+set_location_assignment PIN_L7 -to led
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to clk
+set_instance_assignment -name IO_STANDARD "2.5 V" -to led
+
+set_global_assignment -name LAST_QUARTUS_VERSION "23.1std.0 Lite Edition"
