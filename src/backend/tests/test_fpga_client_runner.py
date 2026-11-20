@@ -262,11 +262,14 @@ def test_real_mock_dispatcher_to_database_to_owned_http_result(saved, jobs):
         run.mode = "mock"
         configure_public_vectors(db, run_id, [0])
         db.commit()
+    endpoint = f"/submissions/{submission_id}/run"
+    assert http.get(endpoint).json()["state"] == "queued"
     deliver_package(package, jobs)
     client = DispatcherClient(FPGA / "bin/fpga-dispatch", jobs, launch="manual")
     assert client.submit(run_id, "mock").disposition == "accepted"
     assert client.submit(run_id, "mock").disposition == "existing"
     assert sync_run(engine, client, run_id) == "running"
+    assert http.get(endpoint).json()["stage"] == "dispatch"
     run_path = jobs / "runs" / str(run_id)
     subprocess.run(
         [
@@ -284,13 +287,30 @@ def test_real_mock_dispatcher_to_database_to_owned_http_result(saved, jobs):
         timeout=30,
     )
     assert sync_run(engine, client, run_id) == "finished"
-    response = http.get(f"/submissions/{submission_id}/run")
+    response = http.get(endpoint)
     data = response.json()
     assert data["result_status"] == "passed" and data["hardware_verified"] is False
     assert data["mode"] == "mock"
     assert data["summary"]["executed"] > 0
     assert [item["vector_index"] for item in data["tests"]] == [0]
     assert "logs" not in data and str(jobs) not in response.text
+    # The operator calls cleanup only after the backend has saved the result.
+    cleanup = subprocess.run(
+        [str(client.executable), "cleanup", "--run-id", str(run_id)],
+        env=client.environment,
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
+    assert json.loads(cleanup.stdout) == {
+        "schema_version": 1,
+        "run_id": str(run_id),
+        "state": "cleaned",
+    }
+    assert not (run_path / "output").exists()
+    assert client.submit(run_id, "mock").disposition == "existing"
+    assert advance_run(engine, client, bindings, run_id, [0]) == "finished"
+    assert http.get(endpoint).json() == data
     account = {
         "email": "other@example.com",
         "full_name": "Other",
@@ -298,7 +318,7 @@ def test_real_mock_dispatcher_to_database_to_owned_http_result(saved, jobs):
     }
     http.post("/auth/register", json=account)
     http.post("/auth/login", json={k: account[k] for k in ("email", "password")})
-    assert http.get(f"/submissions/{submission_id}/run").status_code == 404
+    assert http.get(endpoint).status_code == 404
 
 
 @pytest.mark.skipif(
