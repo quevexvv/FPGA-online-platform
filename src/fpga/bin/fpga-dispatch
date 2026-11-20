@@ -9,7 +9,8 @@ Usage: fpga-dispatch submit --run-id <uuid> --mode hardware|mock
 
 FPGA_JOBS_ROOT задаёт корень incoming и runs.
 Submit регистрирует задания и запускает пользовательский сервис systemd.
-FPGA_DISPATCH_LAUNCH=manual оставляет запуск оператору. Cleanup пока недоступен.
+FPGA_DISPATCH_LAUNCH=manual оставляет запуск оператору.
+Cleanup удаляет данные завершённого задания после их сохранения бэкендом.
 HELP
     exit 0
 fi
@@ -18,8 +19,6 @@ fail() {
     printf 'fpga-dispatch: %s\n' "$2" >&2
     exit "$1"
 }
-
-exists() { [[ -e $1 || -L $1 ]]; }
 
 operation=${1:-}
 run_id=${3:-}
@@ -32,11 +31,10 @@ case "$operation" in
         [[ $launch == systemd || $launch == manual ]] ||
             fail 1 'FPGA_DISPATCH_LAUNCH must be systemd or manual'
         ;;
-    status) [[ $# -eq 3 ]] || fail 2 'expected status --run-id <uuid>' ;;
-    cleanup) fail 2 'cleanup is not implemented' ;;
+    status|cleanup) [[ $# -eq 3 ]] || fail 2 "expected $operation --run-id <uuid>" ;;
     *) fail 2 'unknown command; see --help' ;;
 esac
-[[ $2 == --run-id && $run_id =~ ^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$ ]] ||
+[[ ${2:-} == --run-id && $run_id =~ ^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$ ]] ||
     fail 2 'expected a lowercase UUID'
 
 [[ -n ${FPGA_JOBS_ROOT:-} && $FPGA_JOBS_ROOT == /* && -d $FPGA_JOBS_ROOT ]] ||
@@ -44,6 +42,11 @@ esac
 root=$(cd -- "$FPGA_JOBS_ROOT" && pwd -P)
 [[ $root != / ]] || fail 1 'FPGA_JOBS_ROOT must be dedicated to jobs'
 umask 077
+project=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+# shellcheck source=scripts/run-state.sh
+source "$project/scripts/run-state.sh"
+# shellcheck source=scripts/reconcile-run.sh
+source "$project/scripts/reconcile-run.sh"
 incoming=$root/incoming
 runs=$root/runs
 locks=$runs/.locks
@@ -60,22 +63,30 @@ upload=$incoming/$run_id
 run=$runs/$run_id
 pending=$runs/.$run_id.pending
 ready=$pending/ready
+control=$run/control
+output=$run/output
+cleaned=$control/cleaned.json
 registered=false
 if exists "$run"; then
-    [[ -d $run && ! -L $run && -d $run/control && ! -L $run/control &&
-       -d $run/output && ! -L $run/output && -f $run/control/registration.json &&
-       ! -L $run/control/registration.json && -f $run/output/status.json &&
-       ! -L $run/output/status.json ]] || fail 1 'registration is incomplete or unsafe'
-    registered_mode=$(jq -er --arg id "$run_id" '
-        select(.schema_version == 1 and .run_id == $id and (.mode == "hardware" or .mode == "mock")) | .mode
-    ' "$run/control/registration.json") || fail 1 'registration is invalid'
+    if ! safe_dir "$run" || ! safe_dir "$control"; then
+        fail 1 'unsafe run directories'
+    fi
+    if exists "$cleaned"; then
+        safe_file "$cleaned" || fail 1 'unsafe cleanup marker'
+        jq -es --arg id "$run_id" '
+            . == [{schema_version:1,run_id:$id,state:"cleaned"}]
+        ' "$cleaned" >/dev/null || fail 1 'invalid cleanup marker'
+    else
+        if ! safe_dir "$output" || ! safe_file "$control/registration.json" ||
+            ! safe_file "$output/status.json"; then
+            fail 1 'registration is incomplete or unsafe'
+        fi
+        registered_mode=$(jq -ers --arg id "$run_id" '
+            select(length == 1) | .[0] |
+            select(.schema_version == 1 and .run_id == $id and (.mode == "hardware" or .mode == "mock")) | .mode
+        ' "$control/registration.json") || fail 1 'registration is invalid'
+    fi
     registered=true
-fi
-
-if [[ $operation == status ]]; then
-    [[ $registered == true ]] || fail 2 'run_id is not registered'
-    cat -- "$run/output/status.json"
-    exit
 fi
 
 # Recover an interrupted submit under the same lock. A published directory
@@ -101,7 +112,70 @@ response() {
     jq -cn --arg id "$run_id" --arg disposition "$1" \
         '{schema_version:1,run_id:$id,disposition:$disposition}'
 }
+remove_cleaned_run() {
+    remove_run_payload "$run/input" "$output" "$run/work" || return 1
+    if exists "$control/started"; then
+        safe_dir "$control/started" && rmdir -- "$control/started" || return 1
+    fi
+    rm -f -- "$control/registration.json" "$control/launch.json" "$control/activity.lock"
+}
+
+if [[ $operation != submit ]]; then
+    if [[ $registered == false || $operation == cleanup ]]; then
+        recover_pending || fail 1 'pending registration requires recovery'
+    fi
+    [[ $registered == true ]] || fail 2 'run_id is not registered'
+    if ! exists "$cleaned"; then
+        optional_file "$control/activity.lock" || fail 1 'unsafe activity lock'
+        exec {activity_fd}>> "$control/activity.lock"
+        lock_result=0
+        flock -n -E 75 "$activity_fd" || lock_result=$?
+        case "$lock_result" in
+            0) ;;
+            75) [[ $operation == status ]] || fail 2 'run is still active' ;;
+            *) fail 1 'cannot acquire activity lock' ;;
+        esac
+        if [[ $operation == status ]]; then
+            if [[ $lock_result == 0 ]]; then
+                reconcile_run "$run" "$run_id" "$registered_mode" "$project/scripts/contract.jq" ||
+                    fail 1 'cannot reconcile run status'
+                if jq -e '.state == "finished"' "$output/status.json" >/dev/null; then
+                    remove_run_payload "$run/work" || printf '%s\n' 'fpga-dispatch: work cleanup failed' >&2
+                fi
+            fi
+            cat -- "$output/status.json"
+            exit
+        fi
+        jq -e '.state == "finished"' "$output/status.json" >/dev/null || fail 2 'run is still active'
+        if ! safe_file "$output/result.json" ||
+            ! jq -e --arg kind result -f "$project/scripts/contract.jq" "$output/result.json" >/dev/null ||
+            ! jq -e --arg id "$run_id" --arg mode "$registered_mode" --slurpfile result "$output/result.json" '
+                ($result | length) == 1 and
+                .run_id == $id and .mode == $mode and
+                ($result[0] as $r | $r.run_id == $id and $r.mode == $mode and
+                 $r.status == .result_status and $r.finished_at == .finished_at and $r.started_at == .started_at)
+            ' "$output/status.json" >/dev/null; then
+            fail 1 'result unavailable; call status before cleanup'
+        fi
+        for directory in "$run/input" "$output" "$run/work"; do
+            optional_dir "$directory" || fail 1 'unsafe cleanup directory'
+        done
+        # Record the tombstone before deletion so cleanup can resume after a crash.
+        # shellcheck disable=SC2016
+        write_run_json "$cleaned" --arg id "$run_id" '{schema_version:1,run_id:$id,state:"cleaned"}' ||
+            fail 1 'cannot publish cleanup marker'
+    fi
+    if [[ $operation == cleanup ]]; then
+        remove_cleaned_run || fail 1 'cleanup incomplete; retry cleanup'
+    fi
+    cat -- "$cleaned"
+    exit
+fi
 if [[ $registered == true ]]; then
+    if exists "$cleaned"; then
+        response existing
+        exit
+    fi
     [[ $mode == "$registered_mode" ]] || fail 2 'run_id is already registered with another mode'
     if exists "$upload"; then fail 2 'cannot replace input for a registered run_id'; fi
     clean_published_upload
@@ -114,9 +188,6 @@ recover_pending || fail 1 'pending registration requires recovery'
 incoming_mount=$(stat -c %m -- "$upload")
 runs_mount=$(stat -c %m -- "$runs")
 [[ $incoming_mount == "$runs_mount" ]] || fail 1 'incoming and runs must share a filesystem'
-project=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
-# shellcheck source=scripts/run-state.sh
-source "$project/scripts/run-state.sh"
 mkdir -- "$pending"
 trap 'recover_pending || fail 1 "pending registration requires recovery"' EXIT
 trap 'exit 130' INT
@@ -129,6 +200,9 @@ cp -R -- "$pending/upload" "$ready/input"
 chmod -R u+rX,a-w,go-rwx -- "$ready/input"
 jq -cn --arg id "$run_id" --arg mode "$mode" \
     '{schema_version:1,run_id:$id,mode:$mode}' > "$ready/control/registration.json"
+read -r boot_id < /proc/sys/kernel/random/boot_id
+jq -cn --arg launch "$launch" --arg boot_id "$boot_id" \
+    '{launch:$launch,boot_id:$boot_id}' > "$ready/control/launch.json"
 publish_run_status "$ready/output" "$run_id" "$mode" '' starting dispatch
 
 mv -T -- "$ready" "$run"
@@ -139,7 +213,7 @@ if [[ $launch == systemd ]]; then
         exec {lock_fd}>&-
         exec systemd-run --user --quiet --collect --no-ask-password --expand-environment=no \
             --unit="fpga-run-$run_id" --service-type=exec \
-            --property=Restart=no --property=StandardInput=null \
+            --property=Restart=no --property=StandardInput=null --property=MemoryMax=3G \
             --property=StandardOutput=journal --property=StandardError=journal \
             --setenv="FPGA_JOBS_ROOT=$root" --setenv="FPGA_RUN_CONFIG=${FPGA_RUN_CONFIG:-}" \
             -- "$project/bin/fpga-run" --job "$run/input" --output "$run/output" --mode "$mode"

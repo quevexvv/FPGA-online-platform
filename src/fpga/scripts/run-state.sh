@@ -2,6 +2,25 @@
 
 timestamp() { date -u '+%Y-%m-%dT%H:%M:%SZ'; }
 
+exists() { [[ -e $1 || -L $1 ]]; }
+safe_dir() { [[ -d $1 && ! -L $1 ]]; }
+safe_file() { [[ -f $1 && ! -L $1 ]]; }
+optional_file() { ! exists "$1" || safe_file "$1"; }
+optional_dir() { ! exists "$1" || safe_dir "$1"; }
+
+remove_run_payload() {
+    local directory
+    for directory; do
+        optional_dir "$directory" || return 1
+    done
+    for directory; do
+        if exists "$directory"; then
+            find -P "$directory" -xdev -type d -exec chmod u+w -- {} + || return 1
+            rm -rf --one-file-system -- "$directory" || return 1
+        fi
+    done
+}
+
 write_run_json() {
     local destination=$1 temporary
     shift

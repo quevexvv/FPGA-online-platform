@@ -81,4 +81,32 @@ reject 'HDL does not elaborate'
 upload port-width
 sed 's/\[9:0\]/[8:0]/' examples/counter/student_top.v > "$input/src/student_top.v"
 reject 'HDL does not elaborate'
+
+upload limits
+jq '.sources += [range(1;16) | "src/extra-\(.).v"]' examples/manifest.json > "$input/manifest.json"
+for i in {1..15}; do touch -- "$input/src/extra-$i.v"; done
+size=$(stat -c %s -- "$input/manifest.json")
+printf '%*s' "$((4096 - size))" '' >> "$input/manifest.json"
+size=$(stat -c %s -- "$input/src/student_top.v")
+printf '//%*s\n' "$((65536 - size - 3))" '' > "$input/src/extra-1.v"
+bash scripts/prepare-job.sh "$input" "$work" "$id" mock
+printf ' ' >> "$input/manifest.json"
+reject 'manifest exceeds 4096 bytes'
+truncate -s 4096 "$input/manifest.json"
+printf ' ' >> "$input/src/extra-1.v"
+reject 'sources exceed 65536 bytes in total'
+jq '.sources += [range(1;17) | "src/extra-\(.).v"]' examples/manifest.json > "$input/manifest.json"
+reject 'more than 16 source files'
+
+for count in 128 129; do
+    jq --argjson count "$count" '[.[0] | .steps=65535 | . as $vector |
+        range($count) as $index | $vector + {vector_index:$index}]' testsets/counter-v1.json > "$root/vectors"
+    if [[ $count == 128 ]]; then
+        jq -es -f scripts/test-set.jq "$root/vectors" >/dev/null
+        jq '.[0].steps=65536' "$root/vectors" > "$root/invalid-steps"
+        if jq -es -f scripts/test-set.jq "$root/invalid-steps" >/dev/null; then exit 1; fi
+    elif jq -es -f scripts/test-set.jq "$root/vectors" >/dev/null; then
+        exit 1
+    fi
+done
 echo 'PASS: upload validation and trusted Quartus workspace'
