@@ -21,20 +21,35 @@ int64_t serial_deadline(unsigned timeout_ms)
     return now < 0 ? -1 : now + timeout_ms;
 }
 
-int serial_open(const char *path)
+int serial_open_parity(const char *path, enum serial_parity parity)
 {
+    if (parity != SERIAL_PARITY_NONE && parity != SERIAL_PARITY_EVEN &&
+        parity != SERIAL_PARITY_ODD) {
+        errno = EINVAL;
+        return -1;
+    }
     int fd = open(path, O_RDWR | O_NOCTTY | O_NONBLOCK | O_CLOEXEC);
     struct termios tty;
+    tcflag_t format = CS8;
+    if (parity != SERIAL_PARITY_NONE) format |= PARENB;
+    if (parity == SERIAL_PARITY_ODD) format |= PARODD;
     if (fd < 0) return -1;
     if (tcgetattr(fd, &tty) < 0) goto fail;
     tty.c_iflag = 0;
     tty.c_oflag = 0;
     tty.c_lflag = 0;
-    tty.c_cflag = CS8 | CREAD | CLOCAL;
+    tty.c_cflag = format | CREAD | CLOCAL;
     tty.c_cc[VMIN] = 1;
     tty.c_cc[VTIME] = 0;
     if (cfsetispeed(&tty, B115200) < 0 || cfsetospeed(&tty, B115200) < 0 ||
         tcsetattr(fd, TCSANOW, &tty) < 0 || tcflush(fd, TCIOFLUSH) < 0) goto fail;
+    if (parity != SERIAL_PARITY_NONE) {
+        if (tcgetattr(fd, &tty) < 0) goto fail;
+        if ((tty.c_cflag & (CSIZE | CSTOPB | PARENB | PARODD)) != format) {
+            errno = ENOTSUP;
+            goto fail;
+        }
+    }
     return fd;
 fail: {
     int saved = errno;
@@ -42,6 +57,11 @@ fail: {
     errno = saved;
     return -1;
 }
+}
+
+int serial_open(const char *path)
+{
+    return serial_open_parity(path, SERIAL_PARITY_NONE);
 }
 
 enum serial_result serial_transfer(int fd, void *buffer, size_t size,
