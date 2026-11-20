@@ -1,6 +1,6 @@
 # Измерения C5G и лимиты пилота
 
-## Измерения 20 ноября 2026 года
+## Измерения
 
 Хост Fedora 44, Ryzen 5 7535HS, 14,9 ГиБ RAM. Quartus Prime Lite
 23.1std.0 Build 991, Cyclone V 5CGXFC5C6F27C7. До серии было около
