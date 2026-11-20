@@ -107,6 +107,14 @@ const useStyles = makeStyles({
     fontSize: '14px',
     lineHeight: '1.8',
   },
+  // Заголовок «Терминал» и действие справа (например, ссылка на отчёт)
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    gap: '16px',
+    marginBottom: '12px',
+  },
   title: {
     margin: '0 0 12px',
     fontSize: '14px',
@@ -130,6 +138,7 @@ interface RunLogProps {
   submitError: string | null;
   isConnectionLost: boolean;
   runError: string | null;
+  action?: React.ReactNode; // что показать справа от заголовка
 }
 
 // «Терминал»: что происходит с отправленным решением, строка за строкой
@@ -139,13 +148,17 @@ export const RunLog: React.FC<RunLogProps> = ({
   submitError,
   isConnectionLost,
   runError,
+  action,
 }) => {
   const styles = useStyles();
   const lines = buildLines(run, submitMessage, submitError, isConnectionLost, runError);
 
   return (
     <div className={styles.terminal}>
-      <h2 className={styles.title}>Терминал</h2>
+      <div className={styles.header}>
+        <h2 className={styles.title}>Терминал</h2>
+        {action}
+      </div>
       {/* aria-live: скринридер зачитает новые строки, когда статус изменится */}
       <ul className={styles.lines} aria-live="polite">
         {lines.map((line, index) => (

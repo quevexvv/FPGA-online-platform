@@ -111,3 +111,11 @@ export interface RunStatus {
   tests: RunTest[];
   error: { code: RunResult; message: string } | null;
 }
+
+// Слот брони стенда. TODO: в API брони пока нет, поля могут поменяться
+export interface BookingSlot {
+  id: string;
+  start: string; // время начала, '14:00'
+  end: string; // время конца, '14:30'
+  isBusy: boolean; // слот уже занят кем-то
+}
