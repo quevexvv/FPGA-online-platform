@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.modules.runs.schemas import Outcome
 
 MAX_SOURCE_BYTES = 64 * 1024
 
@@ -45,3 +47,14 @@ class SubmissionSummary(BaseModel):
 
 class SubmissionDetail(SubmissionSummary):
     source_code: str
+
+
+class SubmissionHistoryItem(SubmissionSummary):
+    lab_title: str
+    run_state: Literal["not_started", "queued", "running", "finished"]
+    result_status: Outcome | None
+    elapsed_seconds: float
+    open_passed: int | None
+    open_total: int | None
+    total_passed: int | None
+    total_tests: int | None

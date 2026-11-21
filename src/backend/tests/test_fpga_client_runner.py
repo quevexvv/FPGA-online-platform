@@ -11,10 +11,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.core.config import Settings, get_settings
+from app.db.session import create_database_engine
 from app.integrations.fpga.client import DispatcherClient, DispatchError
-from app.integrations.fpga.delivery import deliver_package
+from app.integrations.fpga.delivery import deliver_package, delivery_lock
 from app.integrations.fpga.package import LabBindings, LabTarget, prepare_package
 from app.integrations.fpga.runner import advance_run, main, sync_run
+from app.integrations.fpga.worker import queue_step
 from app.main import create_app
 from app.modules.labs.seed import DEMO_LAB_ID, seed_demo
 from app.modules.runs.models import Run
@@ -162,7 +164,7 @@ def test_process_failures_are_bounded_and_do_not_leak_stderr(tmp_path, jobs, bod
 
 def test_response_identity_is_checked(tmp_path, jobs):
     other_id = uuid4()
-    receipt = {'schema_version': 1, 'run_id': str(other_id), 'disposition': 'accepted'}
+    receipt = {"schema_version": 1, "run_id": str(other_id), "disposition": "accepted"}
     path = script(tmp_path, f"print({json.dumps(receipt)!r})")
     with pytest.raises(DispatchError, match="different run ID"):
         DispatcherClient(path, jobs).submit(uuid4(), "hardware")
@@ -376,3 +378,38 @@ else:
     finally:
         get_settings.cache_clear()
     assert http.get(f"/submissions/{submission_id}/run").json()["state"] == "running"
+
+
+def test_queue_resumes_first_submission_before_dispatching_second(saved, jobs):
+    http, engine, first, _, bindings, settings = saved
+    login = http.post(
+        "/auth/login", json={"email": "runner@example.com", "password": "Strong password 123"}
+    ).json()
+    new_submission = http.post(
+        f"/labs/{DEMO_LAB_ID}/submissions",
+        headers={"X-CSRF-Token": login["csrf_token"]},
+        json={"source_code": "module next; endmodule"},
+    )
+    assert new_submission.status_code == 201
+    second = UUID(http.get(f"/submissions/{new_submission.json()['id']}/run").json()["run_id"])
+    client = FakeDispatcher(jobs, first)
+    with delivery_lock(jobs / ".backend-queue.lock", 0), pytest.raises(TimeoutError):
+        queue_step(engine, client, bindings)
+    assert client.submits == 0
+    client.lose_ack = True
+    with pytest.raises(DispatchError):
+        queue_step(engine, client, bindings)
+    restarted = create_database_engine(settings)
+    try:
+        assert not (jobs / "runs" / str(second)).exists()
+        assert queue_step(restarted, client, bindings) == (first, "running")
+        assert queue_step(restarted, client, bindings) == (first, "running")
+        client.snapshot, client.report = finished(first)
+        assert queue_step(restarted, client, bindings) == (first, "finished")
+        assert not (jobs / "runs" / str(second)).exists()
+        client.snapshot, client.report = finished(second)
+        assert queue_step(restarted, client, bindings) == (second, "finished")
+        assert queue_step(restarted, client, bindings) is None
+        assert client.submits == 3  # Includes the idempotent retry after the lost receipt.
+    finally:
+        restarted.dispose()

@@ -22,6 +22,7 @@ class Run(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )
+    queue_claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     public_vector_indices: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     status_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     result_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)

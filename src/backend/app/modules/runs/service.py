@@ -134,6 +134,10 @@ def get_run(db: Session, user_id: UUID, submission_id: UUID) -> RunPublic:
         .order_by(Run.created_at.desc(), Run.id.desc())
         .limit(1)
     )
+    return public_run(submission_id, run)
+
+
+def public_run(submission_id: UUID, run: Run | None) -> RunPublic:
     response = RunPublic(
         submission_id=submission_id,
         run_id=None,

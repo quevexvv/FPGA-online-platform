@@ -10,7 +10,12 @@ from app.modules.auth.router import get_current_user, require_csrf
 from app.modules.runs.schemas import RunPublic
 from app.modules.runs.service import get_run
 from app.modules.submissions import service
-from app.modules.submissions.schemas import SubmissionCreate, SubmissionDetail, SubmissionSummary
+from app.modules.submissions.schemas import (
+    SubmissionCreate,
+    SubmissionDetail,
+    SubmissionHistoryItem,
+    SubmissionSummary,
+)
 from app.modules.users.models import User
 
 router = APIRouter(
@@ -19,6 +24,16 @@ router = APIRouter(
 )
 Db = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+@router.get("/submissions", response_model=list[SubmissionHistoryItem])
+def history(
+    user: CurrentUser,
+    db: Db,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+):
+    return service.history(db, user.id, limit, offset)
 
 
 @router.get(

@@ -54,9 +54,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @application.middleware("http")
     async def protect_private_responses(request, call_next):
         response = await call_next(request)
-        if request.url.path.startswith(("/auth/", "/submissions/")) or (
-            request.url.path.startswith("/labs/")
-            and request.url.path.rstrip("/").endswith("/submissions")
+        if (
+            request.url.path == "/submissions"
+            or request.url.path.startswith(("/auth/", "/submissions/"))
+            or (
+                request.url.path.startswith("/labs/")
+                and request.url.path.rstrip("/").endswith("/submissions")
+            )
         ):
             response.headers["Cache-Control"] = "no-store"
         return response
