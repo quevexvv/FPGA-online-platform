@@ -11,6 +11,7 @@ import {
 import { Play20Filled } from '@fluentui/react-icons';
 import { Link, Navigate, useParams } from 'react-router';
 import { ApiError } from '@/api/client';
+import { useAuth } from '@/auth/AuthContext';
 import { submitSolution } from '@/api/submissions';
 import { useLab } from '@/hooks/useLab';
 import { useLatestSubmission } from '@/hooks/useLatestSubmission';
@@ -177,6 +178,34 @@ function saveLastLabId(labId: string | null) {
   }
 }
 
+// Черновики кода хранятся отдельно для каждого пользователя и лабораторной
+function readDraft(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function saveDraft(key: string, code: string) {
+  try {
+    localStorage.setItem(key, code);
+  } catch {
+    // Если хранилище недоступно, редактор продолжит работать
+  }
+}
+
+function clearDraft(key: string, submittedCode: string) {
+  try {
+    // Не удаляем черновик, если код изменился во время отправки
+    if (localStorage.getItem(key) === submittedCode) {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // Не удалось удалить черновик
+  }
+}
+
 // Время от сервера в UTC показываем в часовом поясе пользователя
 function formatTime(isoDate: string): string {
   return new Date(isoDate).toLocaleString('ru-RU', {
@@ -197,16 +226,21 @@ function testCaption(test: RunTest): string {
 
 interface WorkspaceContentProps {
   lab: LabDetail;
+  userId: string;
   // Последнее отправленное решение, если оно есть: с него и продолжаем
   lastSubmission: SubmissionDetail | null;
 }
 
 // Рабочее пространство для уже загруженной лабораторной
-const WorkspaceContent: React.FC<WorkspaceContentProps> = ({ lab, lastSubmission }) => {
+const WorkspaceContent: React.FC<WorkspaceContentProps> = ({ lab, userId, lastSubmission }) => {
   const styles = useStyles();
   const [tab, setTab] = useState<EditorTab>('code');
-  // Продолжаем с последнего отправленного кода, а если отправок не было — с шаблона
-  const initialCode = lastSubmission?.source_code ?? lab.template;
+  const draftKey = `workspace:draft:${userId}:${lab.id}`;
+
+  // Сначала открываем черновик, затем последнюю отправку, затем шаблон
+  const [initialCode] = useState(
+    () => readDraft(draftKey) ?? lastSubmission?.source_code ?? lab.template,
+  );
   const [code, setCode] = useState(initialCode);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -236,12 +270,18 @@ const WorkspaceContent: React.FC<WorkspaceContentProps> = ({ lab, lastSubmission
     saveLastLabId(lab.id);
   }, [lab.id]);
 
+  const handleCodeChange = (value: string) => {
+    setCode(value);
+    saveDraft(draftKey, value);
+  };
+
   const handleSubmit = async () => {
     setIsSubmitting(true);
     setSubmitMessage(null);
     setSubmitError(null);
     try {
       const submission = await submitSolution(lab.id, code);
+      clearDraft(draftKey, code);
       // Время от сервера в UTC, показываем в часовом поясе пользователя
       const time = new Date(submission.created_at).toLocaleTimeString('ru-RU', {
         hour: '2-digit',
@@ -279,7 +319,7 @@ const WorkspaceContent: React.FC<WorkspaceContentProps> = ({ lab, lastSubmission
         <div className={tab === 'code' ? styles.editorWrapper : styles.hidden}>
           <CodeEditor
             initialValue={initialCode}
-            onChange={setCode}
+            onChange={handleCodeChange}
             ariaLabel="Код решения на Verilog"
           />
         </div>
@@ -355,6 +395,7 @@ const WorkspaceContent: React.FC<WorkspaceContentProps> = ({ lab, lastSubmission
 
 export const WorkspacePage: React.FC = () => {
   const styles = useStyles();
+  const { user } = useAuth();
   // id лабораторной берётся из адреса: /workspace/:labId
   const { labId } = useParams();
   const { lab, error, isNotFound, retry } = useLab(labId);
@@ -402,6 +443,15 @@ export const WorkspacePage: React.FC = () => {
     );
   }
 
-  // key: при переходе к другой лабораторной содержимое создаётся заново
-  return <WorkspaceContent key={lab.id} lab={lab} lastSubmission={latest.submission} />;
+  if (!user) return null;
+
+  // При смене пользователя или лабораторной содержимое создаётся заново
+  return (
+    <WorkspaceContent
+      key={`${user.id}:${lab.id}`}
+      lab={lab}
+      userId={user.id}
+      lastSubmission={latest.submission}
+    />
+  );
 };
