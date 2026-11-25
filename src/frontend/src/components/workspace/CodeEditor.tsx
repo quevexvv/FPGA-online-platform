@@ -42,13 +42,17 @@ const editorTheme = EditorView.theme({
     backgroundColor: tokens.colorNeutralBackground1,
     border: 'none',
   },
-  '.cm-activeLine': { backgroundColor: tokens.colorSubtleBackgroundHover },
+  '.cm-activeLine': {
+    backgroundColor: `color-mix(in srgb, ${tokens.colorSubtleBackgroundHover} 35%, transparent)`,
+  },
   '.cm-activeLineGutter': {
     color: tokens.colorNeutralForeground1,
     backgroundColor: 'transparent',
   },
   '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground':
-    { backgroundColor: tokens.colorBrandBackground2 },
+    {
+      backgroundColor: `color-mix(in srgb, ${tokens.colorBrandBackground} 40%, transparent)`,
+    },
 });
 
 const useStyles = makeStyles({
