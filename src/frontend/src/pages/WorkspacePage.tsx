@@ -26,14 +26,15 @@ import { boardStateFromTest, mismatchedLeds } from '@/components/board/boardLayo
 import { LabDetail, RunTest, SubmissionDetail } from '@/types';
 
 const useStyles = makeStyles({
-  // Две колонки: слева редактор, справа плата и проверка
+  // Две равные колонки: редактор, плата и проверка
   page: {
     height: '100%',
     boxSizing: 'border-box',
-    padding: '24px 32px',
+    padding: '16px',
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-    gap: '24px',
+    gridTemplateRows: 'minmax(0, 1fr)',
+    gap: '16px',
     backgroundColor: tokens.colorNeutralBackground2,
   },
   card: {
@@ -49,21 +50,24 @@ const useStyles = makeStyles({
   },
   rightColumn: {
     minHeight: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
+    minWidth: 0,
+    display: 'grid',
+    gridTemplateRows: 'repeat(2, minmax(280px, 1fr))',
+    gap: '16px',
+    overflowY: 'auto',
   },
   boardCard: {
-    flexShrink: 0,
-    padding: '16px',
-    gap: '12px',
+    padding: '8px',
+    gap: '8px',
   },
   board: {
-    // Плата уменьшается вместе с окном, но не растягивается выше 300px
-    maxHeight: '300px',
+    flex: '1 1 0px',
+    minHeight: 0,
+    width: '100%',
   },
   // Кнопки тестов и подпись под платой, по центру, как и сама плата
   boardFooter: {
+    flexShrink: 0,
     display: 'flex',
     flexWrap: 'wrap',
     alignItems: 'center',
@@ -76,9 +80,8 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground2,
   },
   checkCard: {
-    flex: 1,
-    padding: '20px 24px',
-    gap: '20px',
+    padding: '16px 20px',
+    gap: '8px',
   },
   // При недостатке места шкала переносится под кнопку
   checkHeader: {
@@ -103,6 +106,9 @@ const useStyles = makeStyles({
     flexShrink: 0,
     padding: '4px 12px 0',
     borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+    '& [aria-selected="true"]': {
+      backgroundColor: tokens.colorNeutralBackground2,
+    },
   },
   editorWrapper: {
     flex: 1,
