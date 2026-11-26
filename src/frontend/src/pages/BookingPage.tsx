@@ -4,13 +4,13 @@ import { BookingDialog } from '@/components/booking/BookingDialog';
 import { SessionCard } from '@/components/booking/SessionCard';
 import { SlotGrid } from '@/components/booking/SlotGrid';
 import { slotLabel } from '@/components/booking/bookingTime';
-import { getMockSlots, mockSessionEndsAt } from '@/components/booking/bookingMock';
+import { getMockSlots, mockBoardSession } from '@/components/booking/bookingMock';
 
 const useStyles = makeStyles({
   page: {
     height: '100%',
     boxSizing: 'border-box',
-    padding: '24px 32px',
+    padding: '16px',
     overflowY: 'auto',
     display: 'flex',
     flexDirection: 'column',
@@ -43,7 +43,7 @@ const useStyles = makeStyles({
 export const BookingPage: React.FC = () => {
   const styles = useStyles();
   // TODO: слоты и сессия пока ненастоящие, см. bookingMock.ts
-  const [todaySlots] = useState(() => getMockSlots(new Date()));
+  const [todaySlots] = useState(() => getMockSlots(new Date()).filter((slot) => !slot.isBusy));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -65,7 +65,7 @@ export const BookingPage: React.FC = () => {
 
   return (
     <div className={styles.page}>
-      <SessionCard endsAt={mockSessionEndsAt} />
+      <SessionCard session={mockBoardSession} isDemo />
 
       <section aria-labelledby="today-slots-title">
         <h2 id="today-slots-title" className={styles.sectionTitle}>
@@ -85,7 +85,7 @@ export const BookingPage: React.FC = () => {
           </Button>
           <Button
             className={styles.actionButton}
-            appearance="primary"
+            appearance="secondary"
             size="large"
             onClick={() => setIsDialogOpen(true)}
           >

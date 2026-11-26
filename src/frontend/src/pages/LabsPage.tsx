@@ -42,7 +42,7 @@ function toLabItem(lab: LabSummary): LabItem {
 
 const useStyles = makeStyles({
   pageContainer: {
-    padding: '24px 32px',
+    padding: '16px',
     height: '100%',
     boxSizing: 'border-box',
     display: 'flex',

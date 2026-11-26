@@ -1,4 +1,4 @@
-import { BookingSlot } from '@/types';
+import { BoardSession, BookingSlot } from '@/types';
 import { toDateKey } from './bookingTime';
 
 /*
@@ -27,5 +27,10 @@ export function getMockSlots(date: Date): BookingSlot[] {
   }));
 }
 
-// Текущая сессия студента: заканчивается через 12 минут 45 секунд после открытия сайта
-export const mockSessionEndsAt = new Date(Date.now() + (12 * 60 + 45) * 1000);
+// Демонстрационное состояние стенда до появления API
+export const mockBoardSession: BoardSession = {
+  status: 'busy',
+  studentName: 'Иванов Иван',
+  group: '8К51Т',
+  endsAt: new Date(Date.now() + (12 * 60 + 45) * 1000),
+};

@@ -9,6 +9,25 @@ import { HistoryPage } from '@/pages/HistoryPage';
 import { LabTaskPage } from '@/pages/LabTaskPage';
 import { useAuth } from '@/auth/AuthContext';
 
+// Сохраняем выбранную тему между перезагрузками страницы
+const THEME_STORAGE_KEY = 'fpga:theme';
+
+function readTheme(): boolean {
+  try {
+    return localStorage.getItem(THEME_STORAGE_KEY) === 'dark';
+  } catch {
+    return false;
+  }
+}
+
+function saveTheme(isDarkMode: boolean) {
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, isDarkMode ? 'dark' : 'light');
+  } catch {
+    // Если хранилище недоступно, тема работает только в текущей вкладке
+  }
+}
+
 // Рабочее пространство с редактором кода — самая тяжёлая страница (CodeMirror).
 // Загружаем её отдельным файлом, только когда студент её открывает
 const WorkspacePage = lazy(() =>
@@ -49,8 +68,30 @@ const useStyles = makeStyles({
 
 export const App: React.FC = () => {
   const styles = useStyles();
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(readTheme);
   const { user, isLoading } = useAuth();
+
+  function handleThemeToggle() {
+    const nextIsDarkMode = !isDarkMode;
+
+    setIsDarkMode(nextIsDarkMode);
+    saveTheme(nextIsDarkMode);
+  }
+
+  // Синхронизируем тему между открытыми вкладками браузера
+  useEffect(() => {
+    function handleStorage(event: StorageEvent) {
+      if (event.key === THEME_STORAGE_KEY || event.key === null) {
+        setIsDarkMode(readTheme());
+      }
+    }
+
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
 
   // Встроенные элементы браузера (полосы прокрутки, выбор времени) Fluent не красит.
   // color-scheme подсказывает браузеру, в какой теме их рисовать
@@ -70,7 +111,7 @@ export const App: React.FC = () => {
       ) : (
         <div className={styles.appContainer}>
           {/* Хэдер со всеми вкладками и кнопкой смены темы */}
-          <Header isDarkMode={isDarkMode} onThemeToggle={() => setIsDarkMode(!isDarkMode)} />
+          <Header isDarkMode={isDarkMode} onThemeToggle={handleThemeToggle} />
 
           {/* Тело страниц */}
           <main style={{ flex: 1, overflow: 'hidden' }}>

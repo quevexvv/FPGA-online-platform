@@ -21,7 +21,7 @@ export const greenBrand: BrandVariants = {
 };
 
 export const lightPalette = {
-  bgWindow: '#F5F5F7',
+  bgWindow: '#E5E5EA',
   bgPanel: '#FFFFFF',
   textMain: '#242424',
   textSecondary: '#616161',
@@ -47,6 +47,7 @@ export const lightPalette = {
   stepDone: '#129749',
   stepCurrent: '#D97706',
   stepFailed: '#E10000',
+  stepFailedText: '#B91C1C',
   stepPending: '#F0F0F4',
   stepPendingText: '#616161',
   stepLine: '#E1E1E6',
@@ -79,6 +80,7 @@ export const darkPalette = {
   stepDone: '#129749',
   stepCurrent: '#D97706',
   stepFailed: '#E53E3E',
+  stepFailedText: '#F87171',
   stepPending: '#3A3A40',
   stepPendingText: '#A0A0A8',
   stepLine: '#494950',

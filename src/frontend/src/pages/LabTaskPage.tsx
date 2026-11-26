@@ -6,7 +6,7 @@ import { useLab } from '@/hooks/useLab';
 
 const useStyles = makeStyles({
   pageContainer: {
-    padding: '24px 32px',
+    padding: '16px',
     height: '100%',
     boxSizing: 'border-box',
     overflowY: 'auto',

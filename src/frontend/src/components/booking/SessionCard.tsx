@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { makeStyles, tokens } from '@fluentui/react-components';
-import { Timer24Regular } from '@fluentui/react-icons';
-import { useAuth } from '@/auth/AuthContext';
+import { Timer24Regular, CheckmarkCircle24Regular, Warning24Regular } from '@fluentui/react-icons';
+import { BoardSession } from '@/types';
 
 const useStyles = makeStyles({
   card: {
@@ -13,6 +13,7 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorNeutralBackground1,
     borderRadius: tokens.borderRadiusXLarge,
     border: `1px solid ${tokens.colorNeutralStroke2}`,
+    flexWrap: 'wrap',
   },
   label: {
     margin: '0 0 12px',
@@ -53,6 +54,22 @@ const useStyles = makeStyles({
     fontVariantNumeric: 'tabular-nums',
     color: tokens.colorStatusWarningForeground1,
   },
+  free: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '20px',
+    fontWeight: '600',
+    color: tokens.colorStatusSuccessForeground1,
+  },
+  offline: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '20px',
+    fontWeight: '600',
+    color: tokens.colorStatusDangerForeground1,
+  },
 });
 
 // «Иванов Иван Иванович» → «Иванов И. И.»
@@ -82,43 +99,67 @@ function useNow(): number {
 }
 
 interface SessionCardProps {
-  // Когда заканчивается текущая сессия; null — сейчас брони нет
-  endsAt: Date | null;
+  session: BoardSession;
+  isDemo?: boolean;
 }
 
-// Карточка «Текущая сессия»: кто сейчас работает со стендом и сколько осталось
-export const SessionCard: React.FC<SessionCardProps> = ({ endsAt }) => {
+// Текущее состояние стенда и оставшееся время сессии
+export const SessionCard: React.FC<SessionCardProps> = ({ session, isDemo = false }) => {
   const styles = useStyles();
-  const { user } = useAuth();
   const now = useNow();
 
-  if (!endsAt) {
+  const label = isDemo ? 'Текущая сессия (демо)' : 'Текущая сессия';
+
+  if (session.status === 'free') {
     return (
-      <section className={styles.card} aria-label="Текущая сессия">
+      <section className={styles.card} aria-label="Состояние стенда">
         <div>
-          <p className={styles.label}>Текущая сессия</p>
-          <p className={styles.empty}>Сейчас у вас нет активной брони</p>
+          <p className={styles.label}>{label}</p>
+          <p className={styles.empty}>Нет активной сессии</p>
         </div>
+
+        <span className={styles.free}>
+          <CheckmarkCircle24Regular aria-hidden />
+          Плата свободна
+        </span>
       </section>
     );
   }
 
-  const remainingSeconds = Math.max(0, Math.floor((endsAt.getTime() - now) / 1000));
+  if (session.status === 'offline') {
+    return (
+      <section className={styles.card} aria-label="Состояние стенда">
+        <div>
+          <p className={styles.label}>{label}</p>
+          <p className={styles.empty}>Стенд не в сети</p>
+        </div>
+
+        <span className={styles.offline}>
+          <Warning24Regular aria-hidden />
+          Плата недоступна
+        </span>
+      </section>
+    );
+  }
+
+  const remainingSeconds = Math.max(0, Math.ceil((session.endsAt.getTime() - now) / 1000));
 
   return (
     <section className={styles.card} aria-label="Текущая сессия">
       <div>
-        <p className={styles.label}>Текущая сессия</p>
-        {user && (
-          <h1 className={styles.title}>
-            Студент: {shortName(user.full_name)}
-            {user.group && ` (гр. ${user.group})`}
-          </h1>
-        )}
+        <p className={styles.label}>{label}</p>
+
+        <h1 className={styles.title}>
+          Студент: {shortName(session.studentName)}
+          {session.group && ` (гр. ${session.group})`}
+        </h1>
       </div>
+
       <div className={styles.timer}>
-        <span className={styles.timerLabel}>Осталось времени:</span>
-        {/* role="timer": скринридер понимает, что значение меняется само, и не читает каждую секунду */}
+        <span className={styles.timerLabel}>
+          {remainingSeconds > 0 ? 'До окончания сессии:' : 'Ожидаем обновления статуса:'}
+        </span>
+
         <span className={styles.timerValue} role="timer">
           <Timer24Regular aria-hidden />
           {formatRemaining(remainingSeconds)}
