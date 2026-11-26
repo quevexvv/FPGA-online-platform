@@ -119,3 +119,18 @@ export interface BookingSlot {
   end: string; // время конца, '14:30'
   isBusy: boolean; // слот уже занят кем-то
 }
+
+// Состояние стенда. TODO: уточнить поля после появления API брони
+export type BoardSession =
+  | {
+      status: 'busy';
+      studentName: string;
+      group: string | null;
+      endsAt: Date;
+    }
+  | {
+      status: 'free';
+    }
+  | {
+      status: 'offline';
+    };

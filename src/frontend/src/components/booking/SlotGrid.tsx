@@ -1,6 +1,5 @@
 import React from 'react';
 import { makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
-import { appTokens } from '@/theme/themes';
 import { BookingSlot } from '@/types';
 import { slotLabel } from './bookingTime';
 
@@ -35,18 +34,10 @@ const useStyles = makeStyles({
     border: `2px solid ${tokens.colorBrandStroke1}`,
     ':hover': { border: `2px solid ${tokens.colorBrandStroke1}` },
   },
-  busy: {
-    backgroundColor: tokens.colorNeutralBackground3,
-    cursor: 'not-allowed',
-    ':hover': { border: '2px solid transparent' },
-  },
   time: {
     fontSize: '18px',
     fontWeight: '600',
     color: tokens.colorNeutralForeground1,
-  },
-  busyTime: {
-    color: tokens.colorNeutralForeground2,
   },
   status: {
     display: 'flex',
@@ -64,7 +55,11 @@ const useStyles = makeStyles({
     },
   },
   free: { color: tokens.colorBrandForeground1 },
-  taken: { color: appTokens.stepFailed },
+  empty: {
+    margin: 0,
+    fontSize: '14px',
+    color: tokens.colorNeutralForeground2,
+  },
 });
 
 interface SlotGridProps {
@@ -73,9 +68,13 @@ interface SlotGridProps {
   onSelect: (slotId: string) => void;
 }
 
-// Карточки слотов: свободный можно выбрать, занятый — нет
+// Карточки доступных для бронирования слотов
 export const SlotGrid: React.FC<SlotGridProps> = ({ slots, selectedId, onSelect }) => {
   const styles = useStyles();
+
+  if (slots.length === 0) {
+    return <p className={styles.empty}>На сегодня нет свободных слотов</p>;
+  }
 
   return (
     <div className={styles.grid} role="group" aria-label="Слоты на сегодня">
@@ -83,22 +82,12 @@ export const SlotGrid: React.FC<SlotGridProps> = ({ slots, selectedId, onSelect 
         <button
           key={slot.id}
           type="button"
-          className={mergeClasses(
-            styles.slot,
-            slot.id === selectedId && styles.selected,
-            slot.isBusy && styles.busy,
-          )}
-          disabled={slot.isBusy}
-          // aria-pressed: скринридер скажет, что кнопка «нажата», то есть слот выбран
+          className={mergeClasses(styles.slot, slot.id === selectedId && styles.selected)}
           aria-pressed={slot.id === selectedId}
           onClick={() => onSelect(slot.id)}
         >
-          <span className={mergeClasses(styles.time, slot.isBusy && styles.busyTime)}>
-            {slotLabel(slot)}
-          </span>
-          <span className={mergeClasses(styles.status, slot.isBusy ? styles.taken : styles.free)}>
-            {slot.isBusy ? 'Занято' : 'Свободно'}
-          </span>
+          <span className={styles.time}>{slotLabel(slot)}</span>
+          <span className={mergeClasses(styles.status, styles.free)}>Свободно</span>
         </button>
       ))}
     </div>

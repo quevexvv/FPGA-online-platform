@@ -93,7 +93,7 @@ const useStyles = makeStyles({
   labelBottom: { gridRow: '3' },
   labelDone: { color: tokens.colorNeutralForeground1 },
   labelCurrent: { color: appTokens.stepCurrent },
-  labelFailed: { color: appTokens.stepFailed },
+  labelFailed: { color: appTokens.stepFailedText },
 });
 
 interface RunStepsProps {

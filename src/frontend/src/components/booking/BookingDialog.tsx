@@ -57,11 +57,6 @@ const useStyles = makeStyles({
     cursor: 'pointer',
     ':hover': { border: `1px solid ${tokens.colorNeutralStroke1}` },
     ':focus-visible': { outline: `2px solid ${tokens.colorStrokeFocus2}` },
-    ':disabled': {
-      color: tokens.colorNeutralForegroundDisabled,
-      backgroundColor: tokens.colorNeutralBackground3,
-      cursor: 'not-allowed',
-    },
   },
   chipSelected: {
     fontWeight: '600',
@@ -94,7 +89,7 @@ const BookingDialogContent: React.FC<BookingDialogContentProps> = ({ onConfirm }
   const [slotId, setSlotId] = useState<string | null>(null);
   const [manualTime, setManualTime] = useState('');
 
-  const slots = getMockSlots(date);
+  const slots = getMockSlots(date).filter((slot) => !slot.isBusy);
   const selectedSlot = slots.find((slot) => slot.id === slotId) ?? null;
   // Выбрать можно либо готовый слот, либо своё время: что выбрали последним, то и берём
   const timeLabel = selectedSlot
@@ -145,18 +140,21 @@ const BookingDialogContent: React.FC<BookingDialogContentProps> = ({ onConfirm }
             Доступные слоты на {date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}
           </h3>
           <div className={styles.chips} role="group" aria-label="Слоты на выбранный день">
-            {slots.map((slot) => (
-              <button
-                key={slot.id}
-                type="button"
-                className={mergeClasses(styles.chip, slot.id === slotId && styles.chipSelected)}
-                disabled={slot.isBusy}
-                aria-pressed={slot.id === slotId}
-                onClick={() => handleSlotSelect(slot.id)}
-              >
-                {slotLabel(slot)}
-              </button>
-            ))}
+            {slots.length === 0 ? (
+              <p className={styles.hint}>На выбранную дату нет свободных слотов</p>
+            ) : (
+              slots.map((slot) => (
+                <button
+                  key={slot.id}
+                  type="button"
+                  className={mergeClasses(styles.chip, slot.id === slotId && styles.chipSelected)}
+                  aria-pressed={slot.id === slotId}
+                  onClick={() => handleSlotSelect(slot.id)}
+                >
+                  {slotLabel(slot)}
+                </button>
+              ))
+            )}
           </div>
 
           <h3 className={styles.sectionTitle}>
