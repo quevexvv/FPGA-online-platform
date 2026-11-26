@@ -21,7 +21,7 @@ export const greenBrand: BrandVariants = {
 };
 
 export const lightPalette = {
-  bgWindow: '#F5F5F7',
+  bgWindow: '#E5E5EA',
   bgPanel: '#FFFFFF',
   textMain: '#242424',
   textSecondary: '#616161',

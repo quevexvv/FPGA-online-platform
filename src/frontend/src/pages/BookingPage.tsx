@@ -10,7 +10,7 @@ const useStyles = makeStyles({
   page: {
     height: '100%',
     boxSizing: 'border-box',
-    padding: '24px 32px',
+    padding: '16px',
     overflowY: 'auto',
     display: 'flex',
     flexDirection: 'column',
