@@ -80,20 +80,24 @@ const useStyles = makeStyles({
     padding: '20px 24px',
     gap: '20px',
   },
-  // Кнопка отправки и шаги проверки в одну строку, как на макете
+  // При недостатке места шкала переносится под кнопку
   checkHeader: {
     flexShrink: 0,
     display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
-    gap: '32px',
+    justifyContent: 'center',
+    gap: '16px 32px',
   },
   submitButton: {
     flexShrink: 0,
     minWidth: '240px',
   },
   steps: {
-    flex: 1,
+    flex: '1 1 340px',
     minWidth: 0,
+    containerType: 'inline-size',
+    overflowX: 'auto',
   },
   tabs: {
     flexShrink: 0,

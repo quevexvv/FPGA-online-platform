@@ -7,8 +7,10 @@ import { StepState, steps } from './runProgress';
 const useStyles = makeStyles({
   list: {
     display: 'flex',
+    minWidth: '340px',
+    boxSizing: 'border-box',
     margin: 0,
-    padding: 0,
+    padding: '0 20px',
     listStyle: 'none',
   },
   // Каждый шаг — три строки: подпись сверху, кружок, подпись снизу.
@@ -82,7 +84,8 @@ const useStyles = makeStyles({
   },
   label: {
     whiteSpace: 'nowrap',
-    fontSize: '13px',
+    fontSize: 'clamp(11px, calc(7px + 1.2cqi), 13px)',
+    lineHeight: '18px',
     fontWeight: '600',
     color: tokens.colorNeutralForeground2,
   },
