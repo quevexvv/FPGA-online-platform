@@ -1,0 +1,8 @@
+set_global_assignment -name TOP_LEVEL_ENTITY fpga_wrapper
+source wrapper_base.qsf
+set_global_assignment -name VHDL_INPUT_VERSION VHDL_2008
+set_global_assignment -name VHDL_FILE ../examples/vhdl/student_top.vhd
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY ../build/wrapper_vhdl
+
+set_global_assignment -name LAST_QUARTUS_VERSION "23.1std.0 Lite Edition"
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS_NO_OUTPUT_GND "AS INPUT TRI-STATED"

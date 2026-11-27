@@ -128,6 +128,20 @@ test-systemverilog:
 	$(IVERILOG) -g2012 -Wall -s tb_fpga_wrapper -o build/tb_wrapper_systemverilog tests/tb_fpga_wrapper.v $(WRAPPER_HDL) examples/systemverilog/student_top.sv
 	$(VVP) build/tb_wrapper_systemverilog
 
+GHDL ?= ghdl
+.PHONY: build-vhdl test-vhdl
+build-vhdl:
+	cd quartus && "$(QUARTUS_SH)" --flow compile wrapper_vhdl
+
+test-vhdl:
+	@mkdir -p build
+	@command -v "$(GHDL)" >/dev/null || { echo 'Install GHDL with the IEEE libraries' >&2; exit 2; }
+	@{ printf '%s\n' '`timescale 1ns/1ps'; \
+		"$(GHDL)" synth --std=08 --out=verilog examples/vhdl/student_top.vhd -e student_top; \
+	} > build/student_top_from_vhdl.v
+	$(IVERILOG) -g2001 -Wall -s tb_fpga_wrapper -o build/tb_wrapper_vhdl tests/tb_fpga_wrapper.v $(WRAPPER_HDL) build/student_top_from_vhdl.v
+	$(VVP) build/tb_wrapper_vhdl
+
 .PHONY: test-hardware
 test-hardware: build/fpga-uart
 	@bash tests/step-hardware.sh "$${UART_PORT:-}"
