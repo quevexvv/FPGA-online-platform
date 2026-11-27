@@ -12,6 +12,7 @@ import {
 import { Link } from 'react-router';
 import { useAuthStyles } from './authStyles';
 import { ThemeToggle, type ThemeToggleProps } from '@/components/ThemeToggle';
+import { validateRegistration, type RegistrationErrors } from './registrationValidation';
 
 const REGISTRATION_DRAFT_KEY = 'fpga:registration-draft';
 
@@ -57,6 +58,23 @@ export const RegistrationPage: React.FC<ThemeToggleProps> = ({ isDarkMode, onThe
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
+  // Показываем ошибки только после первой попытки отправки
+  const [hasSubmitted, setHasSubmitted] = useState(false);
+
+  const errors = validateRegistration({
+    ...draft,
+    password,
+    confirmPassword,
+  });
+
+  const visibleErrors: RegistrationErrors = hasSubmitted
+  ? errors
+  : {
+      firstName: firstName.trim() ? errors.firstName : undefined,
+      lastName: lastName.trim() ? errors.lastName : undefined,
+    };
+  const isValid = Object.keys(errors).length === 0;
+
   function updateDraft(field: keyof RegistrationDraft, value: string) {
     setDraft((current) => ({
       ...current,
@@ -79,6 +97,15 @@ export const RegistrationPage: React.FC<ThemeToggleProps> = ({ isDarkMode, onThe
     }
   }, [draft]);
 
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setHasSubmitted(true);
+
+    if (!isValid) return;
+
+    // Отправку данных на сервер добавим в следующем коммите
+  }
+
   return (
     <main className={styles.pageLayout}>
       <div className={styles.themeToolbar}>
@@ -98,8 +125,13 @@ export const RegistrationPage: React.FC<ThemeToggleProps> = ({ isDarkMode, onThe
           Регистрация
         </Title3>
 
-        <form className={styles.form} onSubmit={(event) => event.preventDefault()}>
-          <Field label="Имя" required>
+        <form className={styles.form} onSubmit={handleSubmit} noValidate>
+          <Field
+            label="Имя"
+            required
+            validationState={visibleErrors.firstName ? 'error' : 'none'}
+            validationMessage={visibleErrors.firstName}
+          >
             <Input
               autoComplete="given-name"
               value={firstName}
@@ -107,7 +139,12 @@ export const RegistrationPage: React.FC<ThemeToggleProps> = ({ isDarkMode, onThe
             />
           </Field>
 
-          <Field label="Фамилия" required>
+          <Field
+            label="Фамилия"
+            required
+            validationState={visibleErrors.lastName ? 'error' : 'none'}
+            validationMessage={visibleErrors.lastName}
+          >
             <Input
               autoComplete="family-name"
               value={lastName}
@@ -115,7 +152,12 @@ export const RegistrationPage: React.FC<ThemeToggleProps> = ({ isDarkMode, onThe
             />
           </Field>
 
-          <Field label="Email" required>
+          <Field
+            label="Email"
+            required
+            validationState={visibleErrors.email ? 'error' : 'none'}
+            validationMessage={visibleErrors.email}
+          >
             <Input
               type="email"
               autoComplete="email"
@@ -124,7 +166,12 @@ export const RegistrationPage: React.FC<ThemeToggleProps> = ({ isDarkMode, onThe
             />
           </Field>
 
-          <Field label="Учебная группа" hint="Необязательное поле">
+          <Field
+            label="Учебная группа"
+            hint="Необязательное поле"
+            validationState={visibleErrors.group ? 'error' : 'none'}
+            validationMessage={visibleErrors.group}
+          >
             <Input
               placeholder="8К51Т"
               value={group}
@@ -132,7 +179,13 @@ export const RegistrationPage: React.FC<ThemeToggleProps> = ({ isDarkMode, onThe
             />
           </Field>
 
-          <Field label="Пароль" hint="От 12 символов" required>
+          <Field
+            label="Пароль"
+            hint="От 12 до 128 символов"
+            required
+            validationState={visibleErrors.password ? 'error' : 'none'}
+            validationMessage={visibleErrors.password}
+          >
             <Input
               type="password"
               autoComplete="new-password"
@@ -141,7 +194,12 @@ export const RegistrationPage: React.FC<ThemeToggleProps> = ({ isDarkMode, onThe
             />
           </Field>
 
-          <Field label="Повтор пароля" required>
+          <Field
+            label="Повтор пароля"
+            required
+            validationState={visibleErrors.confirmPassword ? 'error' : 'none'}
+            validationMessage={visibleErrors.confirmPassword}
+          >
             <Input
               type="password"
               autoComplete="new-password"
@@ -150,9 +208,11 @@ export const RegistrationPage: React.FC<ThemeToggleProps> = ({ isDarkMode, onThe
             />
           </Field>
 
-          <Button type="submit" appearance="primary" size="large" disabled>
+          <Button type="submit" appearance="primary" size="large">
             Зарегистрироваться
           </Button>
+
+          {hasSubmitted && isValid && <Text role="status">Все поля заполнены корректно</Text>}
         </form>
 
         <Text as="p" className={styles.footer}>
