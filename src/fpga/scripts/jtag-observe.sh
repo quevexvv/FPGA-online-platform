@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 3 || ! $1 =~ ^(program|program-sram-check|probe|snapshot|lab3-trace|sram-check)$ || ! $3 =~ ^[1-9][0-9]*$ ]]; then
-    echo 'Usage: bash scripts/jtag-observe.sh program|program-sram-check|probe|snapshot|lab3-trace|sram-check <cable-name> <device-index>' >&2
+if [[ $# -ne 3 || ! $1 =~ ^(program|program-sram-check|program-sram-helper-check|probe|snapshot|lab3-trace|sram-check)$ || ! $3 =~ ^[1-9][0-9]*$ ]]; then
+    echo 'Usage: bash scripts/jtag-observe.sh <operation> <cable-name> <device-index>' >&2
+    echo 'Operations: program, probe, snapshot, lab3-trace, program-sram-check, program-sram-helper-check, sram-check' >&2
     exit 2
 fi
 
@@ -21,9 +22,13 @@ case "$lock_result" in
     *) echo 'Cannot lock the stand' >&2; exit 1 ;;
 esac
 
-if [[ $1 == program || $1 == program-sram-check ]]; then
-    artifact=jtag-probe/jtag_probe.sof
-    if [[ $1 == program-sram-check ]]; then artifact=sram-check/sram_check.sof; fi
+case "$1" in
+    program) artifact=jtag-probe/jtag_probe.sof ;;
+    program-sram-check) artifact=sram-check/sram_check.sof ;;
+    program-sram-helper-check) artifact=sram-helper-check/sram_helper_check.sof ;;
+    *) artifact= ;;
+esac
+if [[ -n $artifact ]]; then
     cd -- "$project/build"
     [[ -f $artifact && ! -L $artifact ]] || {
         echo "Build the trusted $artifact project first" >&2

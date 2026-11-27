@@ -1,5 +1,5 @@
 `timescale 1ns/1ps
-module tb_sram_check;
+module tb_sram_check #(parameter CHECK_HELPER = 0);
 reg clk = 0;
 always #10 clk = !clk;
 
@@ -10,7 +10,7 @@ reg [15:0] memory [0:262143];
 wire reading = !ce_n && !oe_n && we_n;
 assign #45 data = reading ? memory[address] : 16'bz;
 
-sram_check dut (
+sram_check #(.CHECK_HELPER(CHECK_HELPER)) dut (
     .clk(clk), .sram_a(address), .sram_d(data),
     .ce_n(ce_n), .oe_n(oe_n), .we_n(we_n), .lb_n(lb_n), .ub_n(ub_n)
 );
@@ -27,9 +27,18 @@ initial begin
     if (!ce_n || !oe_n || !we_n || data !== 16'bz)
         $fatal(1, "SRAM drove signals before the JTAG request");
     wait (dut.finished);
-    if (dut.words !== 128'h55aa_1248_a55a_e817_55aa_6996_a55a_e817 ||
-        memory[1] !== 16'h6996 || data !== 16'bz)
+`ifdef LAB4_BAD_ADDRESS
+    if (dut.words !== 128'h55aa_1248_55aa_e817_55aa_6996_a55a_e817)
+        $fatal(1, "Expected address alias to corrupt the helper read: %h", dut.words);
+`elsif LAB4_BAD_DATA
+    if (dut.words !== 128'h55aa_1248_a55a_e817_55aa_6997_a55a_e817)
+        $fatal(1, "Expected the trusted read to detect corrupt write data: %h", dut.words);
+`else
+    if (dut.words !== 128'h55aa_1248_a55a_e817_55aa_6996_a55a_e817)
         $fatal(1, "Unexpected SRAM readback: %h", dut.words);
+`endif
+    if (data !== 16'bz)
+        $fatal(1, "SRAM data bus was not released");
     $display("PASS: SRAM boundaries, retention, overwrite and released data bus");
     $finish;
 end
