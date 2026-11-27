@@ -36,6 +36,7 @@ test: all build/test-uart-peer
 	@bash tests/contract.sh
 	@bash tests/analyst-contract.sh
 	@bash tests/display-observations.sh
+	@bash tests/demo-submit.sh
 	@bash tests/prepare-job.sh
 	@$(MAKE) --no-print-directory test-protocol
 
