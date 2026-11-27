@@ -1,0 +1,4 @@
+set_location_assignment PIN_M9 -to rx
+set_location_assignment PIN_L9 -to tx
+set_instance_assignment -name IO_STANDARD "2.5 V" -to rx
+set_instance_assignment -name IO_STANDARD "2.5 V" -to tx

@@ -1,0 +1,17 @@
+# C5G User Manual, table 3-10, ascending bit order.
+foreach {bus pins} {
+    sram_a {B25 B26 H19 H20 D25 C25 J20 J21 D22 E23 G20 F21 E21 F22 J25 J26 N24 M24}
+    sram_d {E24 E25 K24 K23 F24 G24 L23 L24 H23 H24 H22 J23 F23 G22 L22 K21}
+} {
+    set bit 0
+    foreach pin $pins {
+        set port [format {%s[%d]} $bus $bit]
+        set_location_assignment PIN_$pin -to $port
+        set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to $port
+        incr bit
+    }
+}
+foreach {port pin} {ce_n N23 oe_n M22 we_n G25 lb_n H25 ub_n M25} {
+    set_location_assignment PIN_$pin -to $port
+    set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to $port
+}

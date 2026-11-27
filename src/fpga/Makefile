@@ -9,10 +9,46 @@ C_FILES := $(wildcard src/uart/*.c src/runner/*.c tests/*.c)
 IVERILOG ?= iverilog
 VVP ?= vvp
 QUARTUS_SH ?= quartus_sh
+LAB4_HELPER ?= examples/lab4/student_sram_helper.v
+SRAM_CHECK_HDL := tests/tb_sram_check.v hdl/sram_check.v hdl/c5g_sram_word.v hdl/jtag_snapshot.v
+LAB4_HDL := hdl/lab4_evaluation.v hdl/lab4_text.v hdl/c5g_sram_word.v hdl/jtag_snapshot.v hdl/uart_rx.v hdl/uart_tx.v examples/lab4/student_sram_helper.v
 
 .PHONY: build-jtag-probe
 build-jtag-probe:
 	cd quartus && "$(QUARTUS_SH)" --flow compile jtag_probe
+
+.PHONY: build-sram-check test-sram-check build-sram-helper-check test-sram-helper-check
+build-sram-check:
+	cd quartus && "$(QUARTUS_SH)" --flow compile sram_check
+
+build-sram-helper-check: export FPGA_HELPER_SOURCE := $(value LAB4_HELPER)
+build-sram-helper-check: export FPGA_HELPER_QUARTUS := $(value QUARTUS_SH)
+build-sram-helper-check: build/fpga-stage
+	bash scripts/build-sram-helper.sh "$$FPGA_HELPER_SOURCE" "$$FPGA_HELPER_QUARTUS"
+
+test-hdl: test-sram-check test-sram-helper-check
+test-sram-check:
+	@mkdir -p build
+	$(IVERILOG) -g2001 -Wall -s tb_sram_check -o build/tb_sram_check $(SRAM_CHECK_HDL)
+	$(VVP) build/tb_sram_check
+
+test-sram-helper-check:
+	@mkdir -p build
+	@for variant in LAB4_GOOD LAB4_BAD_ADDRESS LAB4_BAD_DATA LAB4_SHORT_BUSY; do \
+		$(IVERILOG) -g2001 -Wall -s tb_sram_check -Ptb_sram_check.CHECK_HELPER=1 -D$$variant \
+			-o build/tb_sram_helper_$$variant $(SRAM_CHECK_HDL) examples/lab4/student_sram_helper.v && \
+		$(VVP) build/tb_sram_helper_$$variant || exit; \
+	done
+
+.PHONY: build-lab4-evaluation test-lab4-evaluation
+build-lab4-evaluation:
+	cd quartus && "$(QUARTUS_SH)" --flow compile lab4_evaluation
+
+test-hdl: test-lab4-evaluation
+test-lab4-evaluation:
+	@mkdir -p build
+	$(IVERILOG) -g2001 -Wall -s tb_lab4_evaluation -o build/tb_lab4_evaluation tests/tb_lab4_evaluation.v tests/tb_lab3_evaluation.v $(LAB4_HDL)
+	$(VVP) build/tb_lab4_evaluation
 
 .PHONY: all test lint syntax
 all: syntax build/test-serial build/fpga-uart build/fpga-uart-stimulus build/fpga-stage
@@ -38,6 +74,7 @@ test: all build/test-uart-peer
 	@bash tests/display-observations.sh
 	@bash tests/demo-submit.sh
 	@bash tests/prepare-job.sh
+	@bash tests/build-sram-helper.sh
 	@$(MAKE) --no-print-directory test-protocol
 
 lint: syntax

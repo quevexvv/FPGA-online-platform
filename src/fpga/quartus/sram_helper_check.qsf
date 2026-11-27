@@ -1,0 +1,4 @@
+source sram_check.qsf
+set_parameter -name CHECK_HELPER 1
+set_global_assignment -name VERILOG_FILE ../build/sram-helper-source/student_sram_helper.v
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY ../build/sram-helper-check

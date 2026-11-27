@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 3 || ! $1 =~ ^(program|probe|snapshot|lab3-trace)$ || ! $3 =~ ^[1-9][0-9]*$ ]]; then
-    echo 'Usage: bash scripts/jtag-observe.sh program|probe|snapshot|lab3-trace <cable-name> <device-index>' >&2
+if [[ $# -ne 3 || ! $1 =~ ^(program|program-sram-check|sram-helper-check|probe|snapshot|lab3-trace|sram-check)$ || ! $3 =~ ^[1-9][0-9]*$ ]]; then
+    echo 'Usage: bash scripts/jtag-observe.sh <operation> <cable-name> <device-index>' >&2
+    echo 'Operations: program, probe, snapshot, lab3-trace, program-sram-check, sram-check, sram-helper-check' >&2
     exit 2
 fi
 
@@ -21,24 +22,33 @@ case "$lock_result" in
     *) echo 'Cannot lock the stand' >&2; exit 1 ;;
 esac
 
-if [[ $1 == program ]]; then
-    cd -- "$project/build/jtag-probe"
-    [[ -f jtag_probe.sof && ! -L jtag_probe.sof ]] || {
-        echo 'Build the trusted jtag_probe project first' >&2
+case "$1" in
+    program) artifact=jtag-probe/jtag_probe.sof ;;
+    program-sram-check) artifact=sram-check/sram_check.sof ;;
+    sram-helper-check)
+        build_dir=$project/build/sram-helper-check
+        [[ -d $build_dir && ! -L $build_dir ]] || { echo 'Build the SRAM helper check image first' >&2; exit 1; }
+        exec {build_lock}< "$build_dir"
+        flock -s -n -E 75 "$build_lock"
+        artifact=sram-helper-check/sram_helper_check.sof
+        ;;
+    *) artifact= ;;
+esac
+if [[ -n $artifact ]]; then
+    cd -- "$project/build"
+    [[ -f $artifact && -s $artifact && ! -L $artifact ]] || {
+        echo "Build the trusted $artifact project first" >&2
         exit 1
     }
-    exec timeout --kill-after=2s 30s quartus_pgm -c "$2" -m JTAG -o "p;jtag_probe.sof@$3"
+    programmer=(timeout --kill-after=2s 30s quartus_pgm -c "$2" -m JTAG -o "p;$artifact@$3")
+    if [[ $1 != sram-helper-check ]]; then exec "${programmer[@]}"; fi
+    "${programmer[@]}" >&2
 fi
 
 if [[ $1 == probe ]]; then
     exec timeout --kill-after=2s 30s quartus_stp -t "$project/scripts/jtag-observe.tcl" "$@"
 fi
 
-# Keep stdout reserved for the snapshot. Publish only after quartus_stp succeeds.
-snapshot=$(timeout --kill-after=2s 30s quartus_stp -t "$project/scripts/jtag-observe.tcl" "$@" |
-    awk '/^SNAPSHOT / {print substr($0, 10); next} {print > "/dev/stderr"}') || exit "$?"
-if [[ -z $snapshot || $snapshot == *$'\n'* ]]; then
-    echo 'Expected exactly one JTAG snapshot' >&2
-    exit 1
-fi
-printf '%s\n' "$snapshot"
+# shellcheck source=scripts/jtag-capture.sh
+source "$project/scripts/jtag-capture.sh"
+capture_jtag_json "$project/scripts/jtag-observe.tcl" "$@"

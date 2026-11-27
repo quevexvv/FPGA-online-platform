@@ -47,3 +47,37 @@ set replies [list $previous $captured $captured]
 set expected {{"schema_version":1,"current":1,"before":[1,2],"after":[2]}}
 if {[capture_lab3_trace] ne $expected} { error "Unexpected Lab 3 trace bit layout" }
 puts "PASS: wide JTAG trace decoding and frame order"
+
+rename capture_snapshot_bits capture_original_snapshot_bits
+proc capture_snapshot_bits {index width} {
+    if {$index != 0 || $width != 130} { error "Wrong SRAM probe format" }
+    set payload [lindex $::snapshots 0]
+    set ::snapshots [lrange $::snapshots 1 end]
+    return $payload
+}
+set pending [string repeat 0 130]
+foreach {data finished status} {
+    55aa1248a55ae81755aa6996a55ae817 1 passed
+    55aa1248a55ae81755aa6996a55ae816 1 mismatch
+    00000000000000000000000000000000 0 pending
+} {
+    binary scan [binary format H* $data] B* payload
+    set captured "0${finished}$payload"
+    set snapshots [list $pending $captured]
+    if {$finished} {
+        if {[string first "\"status\":\"$status\"" [capture_sram_check]] < 0} {
+            error "Unexpected SRAM verdict"
+        }
+    } elseif {![catch {capture_sram_check} error] || $error ne "SRAM check has not finished"} {
+        error "Expected an incomplete SRAM result to fail"
+    }
+}
+puts "PASS: SRAM readback, corruption and incomplete snapshot"
+
+proc get_insystem_source_probe_instance_info {args} { return [list $::probe] }
+foreach {mode probe} {sram-helper-check {0 1 130 SRCK} sram-check {0 1 130 SRHP}} {
+    if {![catch {observe $mode test-cable 1} error] || ![string match "Expected JTAG instance *" $error]} {
+        error "Expected each SRAM operation to reject the other image"
+    }
+}
+puts "PASS: SRAM diagnostic and helper image identities differ"
