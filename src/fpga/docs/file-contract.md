@@ -19,13 +19,14 @@
 
 | Файл | Поля |
 |---|---|
-| manifest | schema_version, run_id, top, kind, sources, test_set |
+| manifest | schema_version, run_id, top, kind, sources, test_set, language (с версии 2) |
 | status | schema_version, run_id, mode, state, stage, started_at, updated_at, finished_at, result_status |
 | result | schema_version, run_id, mode, status, hardware_verified, started_at, finished_at, summary, observations, error, logs |
 
 `run_id` — уникальный номер запуска в формате UUID, строчными буквами.
-`schema_version` равен 1. Все перечисленные поля должны присутствовать,
-даже если их значение пока `null`. Время записывается в UTC.
+Манифест поддерживает версии 1 и 2, статус и результат — версию 1.
+Манифест версии 1 не содержит `language`. Остальные обязательные поля
+должны присутствовать, даже если значение пока `null`. Время записывается в UTC.
 `test_set` — имя установленного доверенного набора тестов.
 `logs` содержит относительные пути к журналам внутри каталога результата.
 

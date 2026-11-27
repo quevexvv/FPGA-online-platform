@@ -33,6 +33,7 @@ jq -e --arg kind manifest --arg run_id "$run_id" -f "$project/scripts/contract.j
 
 test_set=$(jq -r '.test_set' <<< "$manifest")
 kind=$(jq -r '.kind' <<< "$manifest")
+language=$(jq -r '.language // "verilog"' <<< "$manifest")
 vectors=$project/testsets/$test_set.json
 if [[ $mode == mock ]]; then
     case "$test_set:$kind" in
@@ -81,6 +82,8 @@ for module in "${wrapper[@]}"; do
 done
 compiler=${IVERILOG:-iverilog}
 command -v "$compiler" >/dev/null || { echo 'prepare-job: Icarus Verilog is missing' >&2; exit 1; }
+standard=-g2001
+if [[ $language == systemverilog ]]; then standard=-g2012; fi
 # Read the elaborated port declarations. Keep the generated program as data.
 netlist=$(mktemp -- "$work/.ports.XXXXXXXX")
 trap 'rm -f -- "$netlist"' EXIT
@@ -88,7 +91,7 @@ compile_status=0
 (
     ulimit -f 16384
     exec env -i PATH="$PATH" LC_ALL=C timeout -k 2s 10s "$compiler" \
-        -g2001 -DSYNTHESIS -t vvp -o "$netlist" -s fpga_wrapper \
+        "$standard" -DSYNTHESIS -t vvp -o "$netlist" -s fpga_wrapper \
         "${wrapper_files[@]}" "${source_files[@]}" >/dev/null 2>&1
 ) || compile_status=$?
 case "$compile_status" in
@@ -131,6 +134,8 @@ printf '%s\n' 'QUARTUS_VERSION = "23.1"' 'PROJECT_REVISION = "job"' > "$work/qua
 {
     printf '%s\n' 'source wrapper_base.qsf' 'set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files'
     for path in "${sources[@]}"; do
-        printf 'set_global_assignment -name VERILOG_FILE ../../input/%s\n' "$path"
+        assignment=VERILOG_FILE
+        if [[ $path == *.sv ]]; then assignment=SYSTEMVERILOG_FILE; fi
+        printf 'set_global_assignment -name %s ../../input/%s\n' "$assignment" "$path"
     done
 } > "$work/quartus/job.qsf"

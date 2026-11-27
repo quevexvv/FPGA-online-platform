@@ -30,6 +30,21 @@ cmp quartus/wrapper.sdc "$work/quartus/wrapper.sdc"
 cmp testsets/counter-v1.json "$work/test-set.json"
 grep -Fxq 'set_global_assignment -name VERILOG_FILE ../../input/src/student_top.v' "$work/quartus/job.qsf"
 
+upload systemverilog
+mv -- "$input/src/student_top.v" "$input/src/unused.v"
+sed -i 's/module student_top/module unused/' "$input/src/unused.v"
+jq '.sources += ["src/unused.v"]' examples/systemverilog/manifest.json > "$input/manifest.json"
+cp -- examples/systemverilog/student_top.sv "$input/src/student_top.sv"
+bash scripts/prepare-job.sh "$input" "$work" "$id"
+grep -Fxq 'set_global_assignment -name SYSTEMVERILOG_FILE ../../input/src/student_top.sv' "$work/quartus/job.qsf"
+grep -Fxq 'set_global_assignment -name VERILOG_FILE ../../input/src/unused.v' "$work/quartus/job.qsf"
+
+upload unsupported-systemverilog
+jq '.sources = ["src/student_top.v"]' examples/systemverilog/manifest.json > "$input/manifest.json"
+sed '/always_ff/i\import "DPI-C" function int unsupported();' \
+    examples/systemverilog/student_top.sv > "$input/src/student_top.v"
+reject 'HDL does not elaborate' 3
+
 upload combinational
 jq '.kind="combinational" | .test_set="combinational-v1"' examples/manifest.json > "$input/manifest.json"
 cp -- examples/combinational/student_top.v "$input/src/student_top.v"
@@ -40,6 +55,9 @@ case_number=0
 for filter in '.sources=["../escape.v"]' '.sources=["/absolute.v"]' '.sources=["src/./student_top.v"]' \
     '.sources=["src/student_top.v\n"]' '.sources += .sources' '.sources=["src/project.qsf"]' \
     '.schema_version="1"' '.top="fpga_wrapper"' '.uart_device="/dev/null"' \
+    '.language="systemverilog"' '.schema_version=2' '.schema_version=2 | .language="vhdl"' \
+    '.sources=["src/student_top.sv"]' \
+    '.schema_version=2 | .language="verilog" | .sources=["src/student_top.sv"]' \
     '.run_id="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"' '.test_set="counter-v1\n"'; do
     upload "invalid-$case_number"
     jq "$filter" examples/manifest.json > "$input/manifest.json"
