@@ -5,8 +5,9 @@ from fastapi import HTTPException
 from sqlalchemy import Row, select
 from sqlalchemy.orm import Session
 
+from app.modules.bookings.models import RunBooking
+from app.modules.bookings.service import for_submission
 from app.modules.labs.models import Lab
-from app.modules.labs.service import get_lab
 from app.modules.runs.models import Run
 from app.modules.runs.service import enqueue, public_run
 from app.modules.submissions import repository
@@ -18,9 +19,10 @@ from app.modules.users.models import User, UserRole
 def submit(db: Session, user: User, lab_id: UUID, data: SubmissionCreate) -> Submission:
     if user.role != UserRole.student:
         raise HTTPException(status_code=403, detail="Only students can submit solutions")
-    get_lab(db, lab_id)
+    booking = for_submission(db, user.id, lab_id)
     submission = repository.create(db, user.id, lab_id, data.source_code)
-    enqueue(db, submission.id)
+    run = enqueue(db, submission.id)
+    db.add(RunBooking(run_id=run.id, booking_id=booking.id))
     db.commit()
     return submission
 

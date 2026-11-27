@@ -146,7 +146,7 @@ class ExecutorResult(ContractModel):
 
 
 class PublicError(BaseModel):
-    code: Outcome
+    code: Outcome | Literal["window_closed"]
     message: str
 
 
@@ -156,7 +156,7 @@ class RunPublic(BaseModel):
     state: Literal["not_started", "queued", "running", "finished"]
     stage: Stage | None
     mode: Mode | None
-    result_status: Outcome | None
+    result_status: Outcome | Literal["window_closed"] | None
     hardware_verified: bool
     queued_at: datetime | None
     started_at: datetime | None
@@ -166,4 +166,11 @@ class RunPublic(BaseModel):
     poll_after_seconds: int | None
     summary: Summary | None
     tests: list[Observation]
+    error: PublicError | None
+
+
+class PublicLogs(BaseModel):
+    run_id: UUID | None
+    build: str | None
+    program: str | None
     error: PublicError | None

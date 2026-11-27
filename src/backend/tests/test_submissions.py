@@ -7,6 +7,7 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
+from booking_support import open_test_window
 from fastapi.testclient import TestClient
 from sqlalchemy import func, inspect, select
 from sqlalchemy.exc import IntegrityError
@@ -49,6 +50,7 @@ def login(client, email="owner@example.com"):
     assert response.status_code == 201
     response = client.post("/auth/login", json=credentials)
     assert response.status_code == 200
+    open_test_window(client)
     return {"X-CSRF-Token": response.json()["csrf_token"]}
 
 
@@ -268,6 +270,7 @@ def test_history_filters_lab_and_has_stable_pagination(client, headers):
         for stored in db.scalars(select(Submission)):
             stored.created_at = timestamp
         db.commit()
+    open_test_window(client, other_lab_id)
     other = submit(client, headers, path=f"/labs/{other_lab_id}/submissions").json()
     expected_ids = sorted([first["id"], second["id"]], reverse=True)
     page1 = client.get(f"{SUBMIT_PATH}?limit=1&offset=0").json()

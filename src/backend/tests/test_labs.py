@@ -69,7 +69,18 @@ def test_list_and_detail_use_explicit_public_fields(authenticated, lab_id):
     items = response.json()
     assert len(items) == 1
     summary = items[0]
-    assert set(summary) == {"id", "title", "description", "kind", "is_demo"}
+    assert set(summary) == {
+        "id",
+        "title",
+        "description",
+        "kind",
+        "is_demo",
+        "deadline",
+        "status",
+        "is_locked",
+        "blocked_reason",
+        "position",
+    }
     assert summary["id"] == str(lab_id)
     assert summary["kind"] == "combinational"
     assert summary["is_demo"] is True

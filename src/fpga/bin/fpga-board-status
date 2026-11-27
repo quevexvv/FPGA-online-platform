@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+project=$(cd -- "$(dirname -- "$0")/.." && pwd -P)
+source "$project/scripts/stand-lock.sh"
+open_hardware_stand_lock || exit 1
+if flock -n -E 75 "$stand_lock"; then
+    # Release the executor lock before hardware discovery.
+    flock -u "$stand_lock"
+else
+    rc=$?
+    [[ $rc == 75 ]] || exit 1
+    echo busy
+    exit 0
+fi
+config=${FPGA_RUN_CONFIG:?missing FPGA_RUN_CONFIG}
+uart=$(jq -er '.uart_device | strings' "$config")
+[[ -c $uart && -r $uart && -w $uart ]] || exit 1
+cable=$(jq -er '.jtag_cable | strings' "$config")
+index=$(jq -er '.jtag_device_index | numbers' "$config")
+programmer=$(jq -er '.quartus_pgm | strings' "$config")
+[[ -x $programmer ]] || exit 1
+tool=$(dirname -- "$programmer")/jtagconfig
+timeout -k 1 3 "$tool" | awk -v cable="$cable" -v idx="$index" '
+/^[0-9]+\)/ { n=$1; sub(/\)$/, "", n); sub(/^[0-9]+\)[[:space:]]*/, ""); selected=($0==cable || n==cable); dev=0; next }
+selected && $1 ~ /^[[:xdigit:]]{8}$/ { dev++; if (dev==idx && toupper($0) ~ /5CGX/) found=1 }
+END { exit !found }'
+echo free

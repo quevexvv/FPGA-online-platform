@@ -72,6 +72,8 @@ def record_executor_snapshot(
     run = db.get(Run, run_id)
     if run is None:
         raise ValueError("Unknown backend run")
+    if run.withdrawn_at:
+        raise ValueError("Run was withdrawn before dispatch")
     status = ExecutorStatus.model_validate(status_data)
     if status.run_id != run.id or status.mode != run.mode:
         raise ValueError("Executor identity does not match the registered run")
@@ -162,6 +164,12 @@ def public_run(submission_id: UUID, run: Run | None) -> RunPublic:
     response.state = "queued"
     response.mode = run.mode
     response.queued_at = response.updated_at = utc(run.created_at)
+    if run.withdrawn_at:
+        response.state = "finished"
+        response.result_status = "window_closed"
+        response.updated_at = response.finished_at = utc(run.withdrawn_at)
+        response.error = PublicError(code="window_closed", message="Время для запуска истекло.")
+        return response
     response.poll_after_seconds = 3
     if run.status_snapshot is None:
         return response

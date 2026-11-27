@@ -15,6 +15,7 @@ from app.integrations.fpga.client import DispatcherClient, DispatchError
 from app.integrations.fpga.delivery import delivery_lock
 from app.integrations.fpga.package import LabBindings, read_bindings
 from app.integrations.fpga.runner import advance_run, positive_seconds
+from app.modules.bookings.board import heartbeat
 from app.modules.runs.models import Run
 from app.modules.submissions.models import Submission
 
@@ -31,6 +32,7 @@ def queue_step(engine: Engine, client: DispatcherClient, bindings: LabBindings):
                 .join(Submission, Submission.id == Run.submission_id)
                 .where(
                     Run.mode == "hardware",
+                    Run.withdrawn_at.is_(None),
                     Run.result_snapshot["status"].as_string().is_(None),
                     or_(claimed, active, Submission.lab_id.in_(bindings.labs)),
                 )
@@ -64,6 +66,7 @@ def main():
     try:
         while True:
             try:
+                heartbeat(engine, client)
                 step = queue_step(engine, client, bindings)
                 if step and step[1] == "finished":
                     logger.info("Finished run %s", step[0])

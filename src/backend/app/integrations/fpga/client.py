@@ -63,7 +63,7 @@ class DispatcherClient:
             "FPGA_RUN_CONFIG": str(run_config) if run_config else "",
         }
 
-    def _command(self, arguments: list[str]) -> dict:
+    def _command(self, arguments: list[str], *, cutoff_us: int | None = None) -> dict:
         buffers = {"out": bytearray(), "err": bytearray()}
         deadline = time.monotonic() + self.timeout_seconds
         with subprocess.Popen(
@@ -71,7 +71,7 @@ class DispatcherClient:
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            env=self.environment,
+            env={**self.environment, "FPGA_ADMISSION_CUTOFF_US": str(cutoff_us or "")},
             shell=False,
             start_new_session=True,
         ) as process:
@@ -115,12 +115,12 @@ class DispatcherClient:
             raise DispatchError("Dispatcher response must be a JSON object")
         return data
 
-    def submit(self, run_id: UUID, mode: Mode) -> SubmitReceipt:
+    def submit(self, run_id: UUID, mode: Mode, *, cutoff_us: int | None = None) -> SubmitReceipt:
         run_id = UUID(str(run_id))
         if mode not in ("hardware", "mock"):
             raise ValueError("Invalid registered run mode")
         receipt = SubmitReceipt.model_validate(
-            self._command(["submit", "--run-id", str(run_id), "--mode", mode])
+            self._command(["submit", "--run-id", str(run_id), "--mode", mode], cutoff_us=cutoff_us)
         )
         if receipt.run_id != run_id:
             raise DispatchError("Dispatcher returned a different run ID")

@@ -52,7 +52,7 @@ class SubmissionDetail(SubmissionSummary):
 class SubmissionHistoryItem(SubmissionSummary):
     lab_title: str
     run_state: Literal["not_started", "queued", "running", "finished"]
-    result_status: Outcome | None
+    result_status: Outcome | Literal["window_closed"] | None
     elapsed_seconds: float
     open_passed: int | None
     open_total: int | None

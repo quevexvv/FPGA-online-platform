@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
+from booking_support import open_test_window
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -55,6 +56,7 @@ def saved(tmp_path):
         }
         assert http.post("/auth/register", json=account).status_code == 201
         login = http.post("/auth/login", json={k: account[k] for k in ("email", "password")}).json()
+        open_test_window(http)
         response = http.post(
             f"/labs/{DEMO_LAB_ID}/submissions",
             headers={"X-CSRF-Token": login["csrf_token"]},
@@ -195,7 +197,7 @@ class FakeDispatcher:
         self.submits = 0
         self.lose_ack = False
 
-    def submit(self, run_id, mode):
+    def submit(self, run_id, mode, *, cutoff_us=None):
         self.submits += 1
         run = self.jobs_root / "runs" / str(run_id)
         run.mkdir(exist_ok=True)
@@ -413,3 +415,54 @@ def test_queue_resumes_first_submission_before_dispatching_second(saved, jobs):
         assert client.submits == 3  # Includes the idempotent retry after the lost receipt.
     finally:
         restarted.dispose()
+
+
+@pytest.mark.parametrize("already_admitted", [False, True])
+def test_window_end_drops_waiter_but_recovers_accepted_run(saved, jobs, already_admitted):
+    from datetime import timedelta
+
+    from app.modules.bookings.models import Booking
+
+    http, engine, run_id, submission, bindings, _ = saved
+    client = FakeDispatcher(jobs, run_id)
+    if already_admitted:
+        client.lose_ack = True
+        with pytest.raises(DispatchError):
+            advance_run(engine, client, bindings, run_id)
+        client.snapshot, client.report = finished(run_id)
+    with http.app.state.session_factory() as db, db.begin():
+        booking = db.scalar(select(Booking))
+        booking.starts_at -= timedelta(hours=1)
+        booking.ends_at -= timedelta(hours=1)
+    assert queue_step(engine, client, bindings) == (run_id, "finished")
+    data = http.get(f"/submissions/{submission}/run").json()
+    assert data["result_status"] == ("passed" if already_admitted else "window_closed")
+    assert data["hardware_verified"] == already_admitted
+    assert client.submits == int(already_admitted)
+    assert queue_step(engine, client, bindings) is None
+
+
+def test_live_logs_owned_bounded_and_retained_after_cleanup(saved, jobs):
+    http, engine, run_id, submission, bindings, _ = saved
+    path = f"/submissions/{submission}/logs"
+    client = FakeDispatcher(jobs, run_id)
+    assert http.get(path).json()["build"] is None
+    advance_run(engine, client, bindings, run_id)
+    logdir = jobs / "runs" / str(run_id) / "output" / "logs"
+    logdir.mkdir(parents=True)
+    (logdir / "build.log").write_text("old line\n" * 4000 + "Error at /srv/private/top.v:4\n")
+    (logdir / "program.log").symlink_to(logdir / "build.log")
+    advance_run(engine, client, bindings, run_id)
+    data = http.get(path).json()
+    assert data["build"].startswith("[…]") and "Error at [path]" in data["build"]
+    assert len(data["build"]) < 17000 and "/srv/" not in data["build"] and data["program"] is None
+    (logdir / "program.log").unlink()
+    (logdir / "program.log").write_text("Programming done\n")
+    client.snapshot, client.report = finished(run_id)
+    advance_run(engine, client, bindings, run_id)
+    shutil.rmtree(logdir)
+    assert http.get(path).json()["program"] == "Programming done\n"
+    account = {"email": "peer@example.com", "full_name": "Peer", "password": "Strong password 456"}
+    http.post("/auth/register", json=account)
+    http.post("/auth/login", json={k: account[k] for k in ("email", "password")})
+    assert http.get(path).status_code == 404

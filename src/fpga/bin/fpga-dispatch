@@ -216,6 +216,11 @@ if [[ $preparation == 3 ]]; then
     rmdir -- "$ready/work"
 fi
 
+# Check the booking once more after HDL preparation, before accepting a new run.
+if [[ -n ${FPGA_ADMISSION_CUTOFF_US:-} ]]; then
+    [[ $FPGA_ADMISSION_CUTOFF_US =~ ^[0-9]{1,18}$ ]] || fail 2 'invalid admission cutoff'
+    (( $(date +%s%6N) < 10#$FPGA_ADMISSION_CUTOFF_US )) || fail 2 'booking window closed'
+fi
 mv -T -- "$ready" "$run"
 trap - EXIT
 if [[ $launch == systemd && $preparation == 0 ]]; then

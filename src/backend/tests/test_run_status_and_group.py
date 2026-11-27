@@ -8,6 +8,7 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
+from booking_support import open_test_window
 from fastapi.testclient import TestClient
 from sqlalchemy import func, inspect, select, text
 from sqlalchemy.orm import Session
@@ -52,6 +53,7 @@ def sign_in(client, account=ACCOUNT):
 @pytest.fixture
 def submission(client):
     login = sign_in(client)
+    open_test_window(client)
     response = client.post(
         f"/labs/{DEMO_LAB_ID}/submissions",
         headers={"X-CSRF-Token": login["csrf_token"]},
