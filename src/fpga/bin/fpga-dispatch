@@ -6,6 +6,7 @@ if [[ $# -eq 1 && $1 == --help ]]; then
 Usage: fpga-dispatch submit --run-id <uuid> --mode hardware|mock
   fpga-dispatch status --run-id <uuid>
   fpga-dispatch cleanup --run-id <uuid>
+  fpga-dispatch lab4-demo <cable-name> <device-index> <uart-device>
 
 FPGA_JOBS_ROOT задаёт корень incoming и runs.
 Submit регистрирует задания и запускает пользовательский сервис systemd.
@@ -21,6 +22,10 @@ fail() {
 }
 
 operation=${1:-}
+if [[ $operation == lab4-demo ]]; then
+    project=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+    exec bash "$project/scripts/lab4-demo.sh" "${@:2}"
+fi
 run_id=${3:-}
 mode=${5:-}
 case "$operation" in

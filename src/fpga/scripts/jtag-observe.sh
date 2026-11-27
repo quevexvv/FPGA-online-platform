@@ -41,11 +41,6 @@ if [[ $1 == probe ]]; then
     exec timeout --kill-after=2s 30s quartus_stp -t "$project/scripts/jtag-observe.tcl" "$@"
 fi
 
-# Keep stdout reserved for the snapshot. Publish only after quartus_stp succeeds.
-snapshot=$(timeout --kill-after=2s 30s quartus_stp -t "$project/scripts/jtag-observe.tcl" "$@" |
-    awk '/^SNAPSHOT / {print substr($0, 10); next} {print > "/dev/stderr"}') || exit "$?"
-if [[ -z $snapshot || $snapshot == *$'\n'* ]]; then
-    echo 'Expected exactly one JTAG snapshot' >&2
-    exit 1
-fi
-printf '%s\n' "$snapshot"
+# shellcheck source=scripts/jtag-capture.sh
+source "$project/scripts/jtag-capture.sh"
+capture_jtag_json "$project/scripts/jtag-observe.tcl" "$@"
