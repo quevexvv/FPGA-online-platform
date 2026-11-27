@@ -1,6 +1,16 @@
 import React, { useState } from 'react';
-import { Button, Card, CardHeader, Field, Input, Text, Title2 } from '@fluentui/react-components';
-import { Link } from 'react-router';
+import {
+  Button,
+  Card,
+  CardHeader,
+  Field,
+  Input,
+  MessageBar,
+  MessageBarBody,
+  Text,
+  Title2,
+} from '@fluentui/react-components';
+import { Link, useLocation } from 'react-router';
 import { useAuth } from '@/auth/AuthContext';
 import { ApiError } from '@/api/client';
 import { useAuthStyles } from './authStyles';
@@ -9,8 +19,12 @@ import { ThemeToggle, type ThemeToggleProps } from '@/components/ThemeToggle';
 export const AuthPage: React.FC<ThemeToggleProps> = ({ isDarkMode, onThemeToggle }) => {
   const styles = useAuthStyles();
   const { signIn } = useAuth();
+  const location = useLocation();
 
-  const [email, setEmail] = useState('');
+  const registeredEmail =
+    typeof location.state?.registeredEmail === 'string' ? location.state.registeredEmail : '';
+
+  const [email, setEmail] = useState(registeredEmail);
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -47,6 +61,12 @@ export const AuthPage: React.FC<ThemeToggleProps> = ({ isDarkMode, onThemeToggle
             </Title2>
           }
         />
+
+        {registeredEmail && (
+          <MessageBar intent="success">
+            <MessageBarBody>Аккаунт успешно создан. Теперь вы можете войти.</MessageBarBody>
+          </MessageBar>
+        )}
 
         <form className={styles.form} onSubmit={handleSubmit}>
           <Field label="Email" required>

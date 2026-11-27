@@ -1,6 +1,21 @@
 import { User } from '@/types';
 import { ApiError, apiRequest, csrfStorage } from './client';
 
+interface RegistrationRequest {
+  email: string;
+  full_name: string;
+  group: string | null;
+  password: string;
+}
+
+// Регистрация нового пользователя без создания сессии
+export async function register(data: RegistrationRequest): Promise<User> {
+  return apiRequest<User>('/auth/register', {
+    method: 'POST',
+    body: data,
+  });
+}
+
 interface LoginResult {
   user: User;
   csrf_token: string;
