@@ -11,14 +11,21 @@ def relative: type == "string" and test("\\A[A-Za-z0-9_-][A-Za-z0-9_./-]*\\z")
   and (split("/") | all(. != ".." and . != "." and . != ""));
 def final_status: member(["passed","mismatch","build_error","board_error","invalid_input","busy","internal_error"]);
 def stage: member(["dispatch","validating","locking","building","programming","testing","finalizing"]);
-def common: type == "object" and .schema_version == 1 and (.run_id | uuid);
+def common: type == "object" and (.run_id | uuid);
 def mode: .mode | member(["hardware","mock"]);
 def manifest:
-  keys == ["kind","run_id","schema_version","sources","test_set","top"] and .top == "student_top"
+  (if .schema_version == 1 then
+      fields(["kind","run_id","schema_version","sources","test_set","top"])
+   elif .schema_version == 2 then
+      fields(["kind","language","run_id","schema_version","sources","test_set","top"])
+      and (.language | member(["verilog","systemverilog"]))
+   else false end)
+  and .top == "student_top"
   and ($ARGS.named.run_id == null or .run_id == $ARGS.named.run_id)
   and (.kind | member(["combinational","sequential"]))
-  and (.sources | type == "array" and length > 0 and length == (unique | length)
-       and all(.[]; relative and endswith(".v")))
+  and ((.language == "systemverilog") as $systemverilog
+       | .sources | type == "array" and length > 0 and length == (unique | length)
+       and all(.[]; relative and (endswith(".v") or ($systemverilog and endswith(".sv")))))
   and (.test_set | type == "string" and test("\\A[A-Za-z0-9_-]+\\z"));
 def status:
   fields(["schema_version","run_id","mode","state","stage","started_at","updated_at",
@@ -59,5 +66,6 @@ def result:
        and (if .mode == "hardware" then .hardware_verified else true end)
        and (if .status == "passed" then .summary.failed == 0 else .summary.failed > 0 end)
      else .error != null and .hardware_verified == false end);
-common and (if $kind == "manifest" then manifest elif $kind == "status" then status
+common and (if $kind == "manifest" then manifest
+  elif .schema_version != 1 then false elif $kind == "status" then status
   elif $kind == "result" then result else false end)

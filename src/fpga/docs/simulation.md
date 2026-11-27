@@ -21,3 +21,22 @@ make test-simulator
 Приём байтов служебного UART проверяется командой `make test-uart-rx`,
 передача — `make test-uart-tx`.
 Описание сигналов и проверок — в [UART на ПЛИС](uart-hdl.md).
+
+## SystemVerilog
+
+Icarus Verilog 13.0 проверяет манифест с `language=systemverilog`
+в режиме `-g2012`. Quartus Prime Lite 23.1 открывает исходники `.sv`
+как SystemVerilog, а `.v` и служебную обёртку как Verilog.
+Поддержан синтезируемый поднабор для простого DUT с портами
+`student_top`. Проверенный пример использует `logic` и `always_ff`.
+Вызовы DPI, внешние файлы и конструкции вне поднабора обоих инструментов
+в пилот не входят.
+
+`make test-systemverilog` прогоняет тот же UART-тест обёртки со
+[счётчиком на SystemVerilog](../examples/systemverilog/student_top.sv).
+Для аппаратного запуска скопируйте [манифест версии 2](../examples/systemverilog/manifest.json)
+и исходник в стандартную загрузку `incoming/<run_id>`, проставьте новый
+`run_id` и вызовите `fpga-dispatch submit --run-id <run_id> --mode hardware`.
+Действующий бэкенд продолжает формировать манифесты версии 1.
+На C5G этот манифест через обычный `submit` вернул `passed`,
+`hardware_verified=true` и `dout=0x00003`.
