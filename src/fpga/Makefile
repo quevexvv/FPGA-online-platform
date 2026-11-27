@@ -14,6 +14,16 @@ QUARTUS_SH ?= quartus_sh
 build-jtag-probe:
 	cd quartus && "$(QUARTUS_SH)" --flow compile jtag_probe
 
+.PHONY: build-sram-check test-sram-check
+build-sram-check:
+	cd quartus && "$(QUARTUS_SH)" --flow compile sram_check
+
+test-hdl: test-sram-check
+test-sram-check:
+	@mkdir -p build
+	$(IVERILOG) -g2001 -Wall -s tb_sram_check -o build/tb_sram_check tests/tb_sram_check.v hdl/sram_check.v hdl/c5g_sram_word.v hdl/jtag_snapshot.v
+	$(VVP) build/tb_sram_check
+
 .PHONY: all test lint syntax
 all: syntax build/test-serial build/fpga-uart build/fpga-uart-stimulus build/fpga-stage
 	@test -x bin/fpga-dispatch && test -x bin/fpga-run

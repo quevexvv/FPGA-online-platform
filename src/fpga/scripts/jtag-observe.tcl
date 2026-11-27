@@ -68,6 +68,7 @@ proc observe {mode cable index} {
         probe { set expected {0 1 2 JCHK}; set action probe_control }
         snapshot { set expected {1 1 31 SNAP}; set action capture_snapshot }
         lab3-trace { set expected {0 1 315 L3TR}; set action capture_lab3_trace }
+        sram-check { set expected {0 1 130 SRCK}; set action capture_sram_check }
         default { error "Unknown JTAG operation: $mode" }
     }
     if {[lsearch -exact [get_hardware_names] $cable] < 0} {
@@ -85,6 +86,23 @@ proc observe {mode cable index} {
     if {$failed} { error $result }
     if {$close_failed} { error $close_message }
     if {$mode ne "probe"} { puts "SNAPSHOT $result" }
+}
+
+proc capture_sram_check {} {
+    set bits [capture_snapshot_bits 0 130]
+    if {[string index $bits 1] ne "1"} {
+        after 20
+        set bits [capture_snapshot_bits 0 130]
+    }
+    if {[string index $bits 1] ne "1"} { error "SRAM check has not finished" }
+    set words {}
+    for {set start 2} {$start < 130} {incr start 16} {
+        scan [string range $bits $start [expr {$start + 15}]] %b word
+        lappend words [format {0x%04x} $word]
+    }
+    set expected {0x55aa 0x1248 0xa55a 0xe817 0x55aa 0x6996 0xa55a 0xe817}
+    return [format {{"schema_version":1,"status":"%s","words":["%s"]}} \
+        [expr {$words eq $expected ? "passed" : "mismatch"}] [join $words {","}]]
 }
 
 if {[catch {observe {*}$quartus(args)} message]} {

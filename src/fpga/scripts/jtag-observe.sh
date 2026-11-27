@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 3 || ! $1 =~ ^(program|probe|snapshot|lab3-trace)$ || ! $3 =~ ^[1-9][0-9]*$ ]]; then
-    echo 'Usage: bash scripts/jtag-observe.sh program|probe|snapshot|lab3-trace <cable-name> <device-index>' >&2
+if [[ $# -ne 3 || ! $1 =~ ^(program|program-sram-check|probe|snapshot|lab3-trace|sram-check)$ || ! $3 =~ ^[1-9][0-9]*$ ]]; then
+    echo 'Usage: bash scripts/jtag-observe.sh program|program-sram-check|probe|snapshot|lab3-trace|sram-check <cable-name> <device-index>' >&2
     exit 2
 fi
 
@@ -21,13 +21,15 @@ case "$lock_result" in
     *) echo 'Cannot lock the stand' >&2; exit 1 ;;
 esac
 
-if [[ $1 == program ]]; then
-    cd -- "$project/build/jtag-probe"
-    [[ -f jtag_probe.sof && ! -L jtag_probe.sof ]] || {
-        echo 'Build the trusted jtag_probe project first' >&2
+if [[ $1 == program || $1 == program-sram-check ]]; then
+    artifact=jtag-probe/jtag_probe.sof
+    if [[ $1 == program-sram-check ]]; then artifact=sram-check/sram_check.sof; fi
+    cd -- "$project/build"
+    [[ -f $artifact && ! -L $artifact ]] || {
+        echo "Build the trusted $artifact project first" >&2
         exit 1
     }
-    exec timeout --kill-after=2s 30s quartus_pgm -c "$2" -m JTAG -o "p;jtag_probe.sof@$3"
+    exec timeout --kill-after=2s 30s quartus_pgm -c "$2" -m JTAG -o "p;$artifact@$3"
 fi
 
 if [[ $1 == probe ]]; then
