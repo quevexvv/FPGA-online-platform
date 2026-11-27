@@ -13,6 +13,9 @@ module student_sram_helper (
 );
 always @(posedge clk) begin
     mem_request <= 0;
+`ifdef LAB4_SHORT_BUSY
+    if (busy) busy <= 0;
+`endif
     if (!busy && request) begin
         busy <= 1;
         mem_request <= 1;
@@ -27,7 +30,7 @@ always @(posedge clk) begin
 `else
         mem_data <= data_in;
 `endif
-    end else if (busy && mem_done) begin
+    end else if (mem_done) begin
         if (!mem_write) data_out <= mem_result;
         busy <= 0;
     end

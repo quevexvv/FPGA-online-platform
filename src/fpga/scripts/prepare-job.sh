@@ -2,6 +2,8 @@
 set -euo pipefail
 
 project=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+# shellcheck source=scripts/hdl-source.sh
+source "$project/scripts/hdl-source.sh"
 input=$1
 work=$2
 run_id=$3
@@ -58,11 +60,10 @@ for path in "${sources[@]}"; do
     source_bytes=$(stat -c %s -- "$input/$path")
     total_bytes=$((total_bytes + source_bytes))
     (( total_bytes <= 65536 )) || invalid 'sources exceed 65536 bytes in total'
-    if LC_ALL=C grep -Eq '`[[:space:]]*include|[$]readmem[bh]' "$input/$path"; then
-        invalid_hdl "external file references are unsupported: $path"
-    elif [[ $? -ne 1 ]]; then
+    check_hdl_source "$input/$path" || {
+        [[ $? == 3 ]] && invalid_hdl "external file references are unsupported: $path"
         exit 1
-    fi
+    }
     source_files+=("$input/$path")
 done
 file_count=$(find -P "$input" -type f -printf x | wc -c)

@@ -65,6 +65,8 @@ always @(posedge clk) begin
         if (helper_busy) helper_seen_busy <= 1;
         if (launch_helper) helper_issued <= 1;
         if (done) helper_bus_done <= 1;
+        if (helper_selected && helper_seen_busy && !helper_busy && !helper_bus_done && !done)
+            wait_cycles <= 64;
     end
     if (pending && !finished && complete) begin
         if (!write_word)
@@ -80,7 +82,8 @@ jtag_snapshot #(.WIDTH(129)) capture (
     .clk(clk), .request(request), .ack(ack), .live({finished, words}), .snapshot(snapshot)
 );
 altsource_probe #(
-    .instance_id("SRCK"), .sld_auto_instance_index("NO"), .sld_instance_index(0),
+    .instance_id(CHECK_HELPER ? "SRHP" : "SRCK"),
+    .sld_auto_instance_index("NO"), .sld_instance_index(0),
     .source_width(1), .probe_width(130), .source_initial_value("0"), .enable_metastability("YES")
 ) trace_probe (
     .source_clk(clk), .source_ena(1'b1), .source(request), .probe({ack, snapshot})

@@ -27,7 +27,11 @@ initial begin
     if (!ce_n || !oe_n || !we_n || data !== 16'bz)
         $fatal(1, "SRAM drove signals before the JTAG request");
     wait (dut.finished);
-`ifdef LAB4_BAD_ADDRESS
+`ifdef LAB4_SHORT_BUSY
+    if (dut.step != 4 || dut.words !== 0)
+        $fatal(1, "Expected the test to stop on premature busy deassertion");
+    wait (ce_n);
+`elsif LAB4_BAD_ADDRESS
     if (dut.words !== 128'h55aa_1248_55aa_e817_55aa_6996_a55a_e817)
         $fatal(1, "Expected address alias to corrupt the helper read: %h", dut.words);
 `elsif LAB4_BAD_DATA

@@ -69,6 +69,7 @@ proc observe {mode cable index} {
         snapshot { set expected {1 1 31 SNAP}; set action capture_snapshot }
         lab3-trace { set expected {0 1 315 L3TR}; set action capture_lab3_trace }
         sram-check { set expected {0 1 130 SRCK}; set action capture_sram_check }
+        sram-helper-check { set expected {0 1 130 SRHP}; set action capture_sram_check }
         lab4-frame { set expected {0 1 29 L4FR}; set action capture_lab4_frame }
         default { error "Unknown JTAG operation: $mode" }
     }

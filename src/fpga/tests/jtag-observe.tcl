@@ -73,3 +73,11 @@ foreach {data finished status} {
     }
 }
 puts "PASS: SRAM readback, corruption and incomplete snapshot"
+
+proc get_insystem_source_probe_instance_info {args} { return [list $::probe] }
+foreach {mode probe} {sram-helper-check {0 1 130 SRCK} sram-check {0 1 130 SRHP}} {
+    if {![catch {observe $mode test-cable 1} error] || ![string match "Expected JTAG instance *" $error]} {
+        error "Expected each SRAM operation to reject the other image"
+    }
+}
+puts "PASS: SRAM diagnostic and helper image identities differ"

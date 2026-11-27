@@ -48,17 +48,20 @@ bash scripts/jtag-observe.sh sram-check "$cable" "$device_index"
 управляет контроллер платформы.
 
 ```bash
-make test-sram-helper-check build-sram-helper-check
-bash scripts/jtag-observe.sh program-sram-helper-check "$cable" "$device_index"
-bash scripts/jtag-observe.sh sram-check "$cable" "$device_index"
+make test-sram-helper-check build-sram-helper-check &&
+  bash scripts/jtag-observe.sh sram-helper-check "$cable" "$device_index"
 ```
 
 В доверенном проекте можно подставить HDL с модулем `student_sram_helper`
-через `LAB4_HELPER`. Сборки этого проекта выполняются последовательно.
+через `LAB4_HELPER`. Сборка использует временный проект и отдельное
+окружение Quartus. Внешние ссылки в HDL отклоняются. При ошибке сборки
+прошивка недоступна. Команда наблюдения держит блокировку стенда во время
+прошивки и чтения, а отдельный идентификатор отличает тест helper от
+базовой проверки памяти.
 Стенд проверяет чтения helper после доверенных записей и доверенное
 чтение после записи helper. На запрос разрешена одна операция в четырёх
-диагностических адресах. Неполное чтение по истечении 64 тактов даёт
-`mismatch` с доступными словами.
+диагностических адресах. Таймаут в 64 такта или сброс `busy` до
+завершения операции дают `mismatch` с доступными словами.
 
 На C5G исправная фикстура дала `passed`. Фикстура, подменяющая
 `20000` на `00000`, дала `mismatch` со значением `55aa` вместо

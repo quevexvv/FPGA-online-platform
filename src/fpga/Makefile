@@ -21,10 +21,10 @@ build-jtag-probe:
 build-sram-check:
 	cd quartus && "$(QUARTUS_SH)" --flow compile sram_check
 
-build-sram-helper-check:
-	@mkdir -p build/sram-helper-source
-	cp -- "$(LAB4_HELPER)" build/sram-helper-source/student_sram_helper.v
-	cd quartus && "$(QUARTUS_SH)" --flow compile sram_helper_check
+build-sram-helper-check: export FPGA_HELPER_SOURCE := $(value LAB4_HELPER)
+build-sram-helper-check: export FPGA_HELPER_QUARTUS := $(value QUARTUS_SH)
+build-sram-helper-check: build/fpga-stage
+	bash scripts/build-sram-helper.sh "$$FPGA_HELPER_SOURCE" "$$FPGA_HELPER_QUARTUS"
 
 test-hdl: test-sram-check test-sram-helper-check
 test-sram-check:
@@ -34,7 +34,7 @@ test-sram-check:
 
 test-sram-helper-check:
 	@mkdir -p build
-	@for variant in LAB4_GOOD LAB4_BAD_ADDRESS LAB4_BAD_DATA; do \
+	@for variant in LAB4_GOOD LAB4_BAD_ADDRESS LAB4_BAD_DATA LAB4_SHORT_BUSY; do \
 		$(IVERILOG) -g2001 -Wall -s tb_sram_check -Ptb_sram_check.CHECK_HELPER=1 -D$$variant \
 			-o build/tb_sram_helper_$$variant $(SRAM_CHECK_HDL) examples/lab4/student_sram_helper.v && \
 		$(VVP) build/tb_sram_helper_$$variant || exit; \
@@ -74,6 +74,7 @@ test: all build/test-uart-peer
 	@bash tests/display-observations.sh
 	@bash tests/demo-submit.sh
 	@bash tests/prepare-job.sh
+	@bash tests/build-sram-helper.sh
 	@$(MAKE) --no-print-directory test-protocol
 
 lint: syntax
