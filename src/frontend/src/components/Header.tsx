@@ -1,10 +1,7 @@
 import React from 'react';
 import { Button, makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
-import {
-  SignOut24Regular,
-  WeatherMoon24Regular,
-  WeatherSunny24Regular,
-} from '@fluentui/react-icons';
+import { SignOut24Regular } from '@fluentui/react-icons';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { useAuth } from '@/auth/AuthContext';
 import { NavLink } from 'react-router';
 
@@ -121,12 +118,7 @@ export const Header: React.FC<HeaderProps> = ({ isDarkMode, onThemeToggle }) => 
 
       {/* Кнопки темы и выхода в правом углу */}
       <div className={styles.rightSection}>
-        <Button
-          appearance="subtle"
-          icon={isDarkMode ? <WeatherSunny24Regular /> : <WeatherMoon24Regular />}
-          onClick={onThemeToggle}
-          aria-label="Сменить тему"
-        />
+        <ThemeToggle isDarkMode={isDarkMode} onThemeToggle={onThemeToggle} />
         <Button
           appearance="subtle"
           icon={<SignOut24Regular />}

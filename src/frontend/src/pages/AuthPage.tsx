@@ -1,46 +1,13 @@
 import React, { useState } from 'react';
-import {
-  Button,
-  Card,
-  CardHeader,
-  Field,
-  Input,
-  makeStyles,
-  Text,
-  Title2,
-  tokens,
-} from '@fluentui/react-components';
+import { Button, Card, CardHeader, Field, Input, Text, Title2 } from '@fluentui/react-components';
+import { Link } from 'react-router';
 import { useAuth } from '@/auth/AuthContext';
 import { ApiError } from '@/api/client';
+import { useAuthStyles } from './authStyles';
+import { ThemeToggle, type ThemeToggleProps } from '@/components/ThemeToggle';
 
-const useStyles = makeStyles({
-  pageLayout: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: '100vw',
-    height: '100vh',
-    backgroundColor: tokens.colorNeutralBackground2,
-  },
-  card: {
-    width: '360px',
-    padding: '24px',
-    backgroundColor: tokens.colorNeutralBackground1,
-    boxShadow: tokens.shadow16,
-    borderRadius: tokens.borderRadiusXLarge,
-  },
-  form: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  error: {
-    color: tokens.colorPaletteRedForeground1,
-  },
-});
-
-export const AuthPage: React.FC = () => {
-  const styles = useStyles();
+export const AuthPage: React.FC<ThemeToggleProps> = ({ isDarkMode, onThemeToggle }) => {
+  const styles = useAuthStyles();
   const { signIn } = useAuth();
 
   const [email, setEmail] = useState('');
@@ -68,6 +35,10 @@ export const AuthPage: React.FC = () => {
 
   return (
     <main className={styles.pageLayout}>
+      <div className={styles.themeToolbar}>
+        <ThemeToggle isDarkMode={isDarkMode} onThemeToggle={onThemeToggle} />
+      </div>
+
       <Card className={styles.card}>
         <CardHeader
           header={
@@ -106,6 +77,13 @@ export const AuthPage: React.FC = () => {
             {isSubmitting ? 'Входим...' : 'Войти'}
           </Button>
         </form>
+
+        <Text as="p" className={styles.footer}>
+          Нет аккаунта?{' '}
+          <Link to="/register" className={styles.link}>
+            Зарегистрироваться
+          </Link>
+        </Text>
       </Card>
     </main>
   );

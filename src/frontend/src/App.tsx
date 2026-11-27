@@ -3,6 +3,7 @@ import { FluentProvider, makeStyles, Spinner, tokens } from '@fluentui/react-com
 import { Navigate, Route, Routes } from 'react-router';
 import { customLightTheme, customDarkTheme } from '@/theme/themes';
 import { AuthPage } from '@/pages/AuthPage';
+import { RegistrationPage } from '@/pages/RegistrationPage';
 import { Header } from '@/components/Header';
 import { LabsPage } from '@/pages/LabsPage';
 import { HistoryPage } from '@/pages/HistoryPage';
@@ -107,7 +108,20 @@ export const App: React.FC = () => {
           <Spinner label="Загрузка..." />
         </div>
       ) : !user ? (
-        <AuthPage />
+        <Routes>
+          <Route
+            path="/register"
+            element={<RegistrationPage isDarkMode={isDarkMode} onThemeToggle={handleThemeToggle} />}
+          />
+          <Route
+            path="/login"
+            element={<AuthPage isDarkMode={isDarkMode} onThemeToggle={handleThemeToggle} />}
+          />
+          <Route
+            path="*"
+            element={<AuthPage isDarkMode={isDarkMode} onThemeToggle={handleThemeToggle} />}
+          />
+        </Routes>
       ) : (
         <div className={styles.appContainer}>
           {/* Хэдер со всеми вкладками и кнопкой смены темы */}
