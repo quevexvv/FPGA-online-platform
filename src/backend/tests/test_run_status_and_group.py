@@ -8,6 +8,7 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
+from booking_support import open_test_window
 from fastapi.testclient import TestClient
 from sqlalchemy import func, inspect, select, text
 from sqlalchemy.orm import Session
@@ -52,6 +53,7 @@ def sign_in(client, account=ACCOUNT):
 @pytest.fixture
 def submission(client):
     login = sign_in(client)
+    open_test_window(client)
     response = client.post(
         f"/labs/{DEMO_LAB_ID}/submissions",
         headers={"X-CSRF-Token": login["csrf_token"]},
@@ -232,13 +234,21 @@ def test_executor_errors_do_not_expose_raw_messages_or_paths(client, submission,
 
 def test_mismatch_can_be_hardware_verified(client, submission):
     run_id = client.get(endpoint(submission)).json()["run_id"]
+    with client.app.state.session_factory() as db, db.begin():
+        configure_public_vectors(db, UUID(run_id), [1])
     report = result(run_id, outcome="mismatch")
     report["observations"][0].update(dout="0x00000", match=False)
     report["summary"].update(passed=1, failed=1)
     ingest(client, run_id, status(run_id, "finished", "mismatch"), report)
     data = client.get(endpoint(submission)).json()
     assert data["hardware_verified"] is True and data["result_status"] == "mismatch"
-    assert data["tests"] == []
+    assert [test["vector_index"] for test in data["tests"]] == [1]
+    (row,) = client.get("/submissions").json()
+    assert row["run_state"] == "finished" and row["result_status"] == "mismatch"
+    assert (row["open_passed"], row["open_total"]) == (1, 1)
+    assert (row["total_passed"], row["total_tests"]) == (1, 2)
+    assert row["elapsed_seconds"] == 5
+    assert "tests" not in row and "observations" not in row
 
 
 @pytest.mark.parametrize(

@@ -7,6 +7,7 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
+from booking_support import open_test_window
 from fastapi.testclient import TestClient
 from sqlalchemy import func, inspect, select
 from sqlalchemy.exc import IntegrityError
@@ -49,6 +50,7 @@ def login(client, email="owner@example.com"):
     assert response.status_code == 201
     response = client.post("/auth/login", json=credentials)
     assert response.status_code == 200
+    open_test_window(client)
     return {"X-CSRF-Token": response.json()["csrf_token"]}
 
 
@@ -268,12 +270,24 @@ def test_history_filters_lab_and_has_stable_pagination(client, headers):
         for stored in db.scalars(select(Submission)):
             stored.created_at = timestamp
         db.commit()
-    submit(client, headers, path=f"/labs/{other_lab_id}/submissions")
+    open_test_window(client, other_lab_id)
+    other = submit(client, headers, path=f"/labs/{other_lab_id}/submissions").json()
     expected_ids = sorted([first["id"], second["id"]], reverse=True)
     page1 = client.get(f"{SUBMIT_PATH}?limit=1&offset=0").json()
     page2 = client.get(f"{SUBMIT_PATH}?limit=1&offset=1").json()
     assert [page1[0]["id"], page2[0]["id"]] == expected_ids
     assert client.get(f"{SUBMIT_PATH}?limit=1&offset=2").json() == []
+    records = client.get("/submissions")
+    assert records.headers["Cache-Control"] == "no-store"
+    assert [row["id"] for row in records.json()] == [other["id"], *expected_ids]
+    assert records.json()[0]["lab_title"] == "Other lab"
+    assert client.get("/submissions?limit=1&offset=1").json() == records.json()[1:2]
+    client.cookies.clear()
+    assert client.get("/submissions").status_code == 401
+    second_headers = login(client, "second@example.com")
+    own = submit(client, second_headers).json()
+    assert [row["id"] for row in client.get("/submissions").json()] == [own["id"]]
+
 
 
 @pytest.mark.parametrize("query", ["limit=0", "limit=101", "offset=-1", "limit=abc"])

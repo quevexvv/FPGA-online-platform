@@ -7,10 +7,16 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.modules.auth.router import get_current_user, require_csrf
-from app.modules.runs.schemas import RunPublic
+from app.modules.runs.models import Run
+from app.modules.runs.schemas import PublicLogs, RunPublic
 from app.modules.runs.service import get_run
 from app.modules.submissions import service
-from app.modules.submissions.schemas import SubmissionCreate, SubmissionDetail, SubmissionSummary
+from app.modules.submissions.schemas import (
+    SubmissionCreate,
+    SubmissionDetail,
+    SubmissionHistoryItem,
+    SubmissionSummary,
+)
 from app.modules.users.models import User
 
 router = APIRouter(
@@ -19,6 +25,16 @@ router = APIRouter(
 )
 Db = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+@router.get("/submissions", response_model=list[SubmissionHistoryItem])
+def history(
+    user: CurrentUser,
+    db: Db,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+):
+    return service.history(db, user.id, limit, offset)
 
 
 @router.get(
@@ -79,4 +95,17 @@ def download_source(submission_id: UUID, user: CurrentUser, db: Db):
             "Content-Disposition": f'attachment; filename="submission-{submission.id}.v"',
             "X-Content-Type-Options": "nosniff",
         },
+    )
+
+
+@router.get("/submissions/{submission_id}/logs", response_model=PublicLogs)
+def logs(submission_id: UUID, user: CurrentUser, db: Db):
+    status = get_run(db, user.id, submission_id)
+    run = db.get(Run, status.run_id) if status.run_id else None
+    data = (run.public_logs or {}) if run else {}
+    return PublicLogs(
+        run_id=status.run_id,
+        build=data.get("build"),
+        program=data.get("program"),
+        error=status.error,
     )

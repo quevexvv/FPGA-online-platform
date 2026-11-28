@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import StaleDataError
@@ -13,10 +14,19 @@ from sqlalchemy.orm.exc import StaleDataError
 from app.core.config import get_settings
 from app.db.session import create_database_engine
 from app.integrations.fpga.client import DispatcherClient, DispatchError
-from app.integrations.fpga.delivery import AlreadyRegisteredError, deliver_package
+from app.integrations.fpga.delivery import (
+    AlreadyRegisteredError,
+    deliver_package,
+    delivery_lock,
+    require_directory,
+)
+from app.integrations.fpga.logs import read_public_logs
 from app.integrations.fpga.package import LabBindings, prepare_package, read_bindings
+from app.modules.bookings.models import Booking, LabPolicy, RunBooking
+from app.modules.bookings.service import now_utc
 from app.modules.runs.models import Run
-from app.modules.runs.service import configure_public_vectors, record_executor_snapshot
+from app.modules.runs.service import configure_public_vectors, record_executor_snapshot, utc
+from app.modules.submissions.models import Submission
 
 
 def advance_run(
@@ -30,18 +40,56 @@ def advance_run(
         run = db.get(Run, run_id)
         if run is None:
             raise ValueError("Unknown backend run")
-        if run.result_snapshot is not None:
+        if run.result_snapshot is not None or run.withdrawn_at is not None:
             return "finished"
         if public_indices is not None:
             configure_public_vectors(db, run_id, public_indices)
         mode = run.mode
-        package = prepare_package(db, run_id, bindings) if run.status_snapshot is None else None
+        cutoff_us = None
+        if run.status_snapshot is None and mode == "hardware":
+            booking = db.scalar(
+                select(Booking)
+                .join(RunBooking, RunBooking.booking_id == Booking.id)
+                .where(RunBooking.run_id == run_id)
+            )
+            submission = db.get(Submission, run.submission_id)
+            if (
+                booking
+                and booking.user_id == submission.user_id
+                and booking.lab_id == submission.lab_id
+                and booking.checked_in_at
+                and not booking.cancelled_at
+            ):
+                rule = db.get(LabPolicy, booking.lab_id)
+                cutoff = utc(booking.ends_at)
+                if rule and rule.deadline:
+                    cutoff = min(cutoff, utc(rule.deadline))
+                if utc(booking.starts_at) <= now_utc() < cutoff:
+                    cutoff_us = int(cutoff.timestamp() * 1_000_000)
+            if cutoff_us is None:
+                # A lost acknowledgement can leave an accepted run without a DB snapshot.
+                runs_path = client.jobs_root / "runs"
+                runs_path.mkdir(mode=0o700, exist_ok=True)
+                require_directory(runs_path)
+                locks = runs_path / ".locks"
+                locks.mkdir(mode=0o700, exist_ok=True)
+                require_directory(locks)
+                with delivery_lock(locks / str(run_id), 5):
+                    registered = (runs_path / str(run_id)).is_dir()
+                    if not registered:
+                        run.withdrawn_at = now_utc()
+                        return "finished"
+                package = None
+            else:
+                package = prepare_package(db, run_id, bindings)
+        else:
+            package = prepare_package(db, run_id, bindings) if run.status_snapshot is None else None
     if package is not None:
         try:
             deliver_package(package, client.jobs_root)
         except AlreadyRegisteredError:
             pass
-        client.submit(run_id, mode)
+        client.submit(run_id, mode, cutoff_us=cutoff_us)
     return sync_run(engine, client, run_id)
 
 
@@ -55,7 +103,11 @@ def sync_run(engine: Engine, client: DispatcherClient, run_id: UUID) -> str:
         mode = run.mode
     status = client.status(run_id, mode)
     result = client.result(run_id, mode) if status.state == "finished" else None
+    logs = read_public_logs(client.jobs_root, run_id)
     with Session(engine) as db, db.begin():
+        if logs:
+            stored = db.get(Run, run_id)
+            stored.public_logs = {**(stored.public_logs or {}), **logs}
         record_executor_snapshot(
             db,
             run_id,

@@ -1,3 +1,5 @@
+from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -13,6 +15,11 @@ class LabSummary(BaseModel):
     description: str
     kind: LabKind
     is_demo: bool
+    deadline: datetime | None = None
+    status: Literal["not_started", "in_progress", "passed"] = "not_started"
+    is_locked: bool = False
+    blocked_reason: Literal["deadline", "previous_lab"] | None = None
+    position: int = 0
 
 
 class LabDetail(LabSummary):

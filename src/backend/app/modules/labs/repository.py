@@ -1,17 +1,19 @@
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.modules.bookings.models import LabPolicy
 from app.modules.labs.models import Lab
 
 
 def list_published(db: Session, limit: int, offset: int) -> Sequence[Lab]:
     return db.scalars(
         select(Lab)
+        .outerjoin(LabPolicy, LabPolicy.lab_id == Lab.id)
         .where(Lab.is_published.is_(True))
-        .order_by(Lab.title, Lab.id)
+        .order_by(func.coalesce(LabPolicy.position, 0), Lab.title, Lab.id)
         .limit(limit)
         .offset(offset)
     ).all()
